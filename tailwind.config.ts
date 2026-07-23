@@ -9,9 +9,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        background: "#FDF6EC",
+        primary: "#22C55E",
+        secondary: "#7DD3E8",
+        accent: "#F4A5A5",
+        dark: "#1E2A38",
       },
+      boxShadow: {
+        brutal: "4px 4px 0px #1E2A38",
+      }
     },
   },
   plugins: [],
