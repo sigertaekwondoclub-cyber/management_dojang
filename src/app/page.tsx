@@ -11,12 +11,14 @@ export default function Home() {
         {/* Hero Section */}
         <div className="text-center flex flex-col items-center gap-6">
           <Badge color="secondary" className="mb-2 text-dark font-sans text-sm">Versi Beta 1.0</Badge>
-          {/* Logo Siger TC */}
-          <img 
-            src="/logo-siger.png" 
-            alt="Logo Siger Taekwondo Club" 
-            className="w-32 h-32 md:w-40 md:h-40 object-contain drop-shadow-md animate-fade-in" 
-          />
+          {/* Logo Siger TC dalam lingkaran */}
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center p-2 overflow-hidden animate-fade-in">
+            <img 
+              src="/logo-siger.png" 
+              alt="Logo Siger Taekwondo Club" 
+              className="w-full h-full object-contain" 
+            />
+          </div>
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-dark drop-shadow-sm mt-2">
             Siger Taekwondo Club
           </h1>

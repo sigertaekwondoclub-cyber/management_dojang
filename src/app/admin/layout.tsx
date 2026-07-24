@@ -81,7 +81,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <NavigationProgress />
 
       <aside className="w-full md:w-64 bg-white border-r-2 md:border-r-4 border-b-2 md:border-b-0 border-dark p-6 flex flex-col">
-        <h2 className="text-2xl font-bold font-sans text-dark mb-8">Admin Panel</h2>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center p-1 overflow-hidden shrink-0">
+            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
+          <h2 className="text-xl font-bold font-sans text-dark leading-tight">Admin Panel</h2>
+        </div>
         <nav className="flex flex-col gap-2 flex-1 overflow-y-auto">
           {menu.map((item) => {
             // Aktif jika pathname sama persis atau dimulai dengan path item (sub-route)

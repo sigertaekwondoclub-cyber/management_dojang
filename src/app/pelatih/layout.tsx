@@ -73,9 +73,14 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
       <NavigationProgress />
 
       <aside className="w-full md:w-64 bg-white border-r-2 md:border-r-4 border-b-2 md:border-b-0 border-dark p-6 flex flex-col">
-        <div className="mb-8">
-          <h2 className="text-xl font-bold font-sans text-dark">Pelatih Panel</h2>
-          <p className="text-sm text-dark/60 font-sans mt-1 truncate">{nama}</p>
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-12 h-12 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center p-1 overflow-hidden shrink-0">
+            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold font-sans text-dark leading-tight">Pelatih Panel</h2>
+            <p className="text-xs text-dark/60 font-sans mt-0.5 truncate max-w-[130px]">{nama}</p>
+          </div>
         </div>
         <nav className="flex flex-col gap-2 flex-1">
           {menu.map((item) => {
