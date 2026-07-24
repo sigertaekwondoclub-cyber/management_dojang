@@ -6,4 +6,22 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-baloo2);
   }
+  
+  body {
+    background-image: url('/logo-siger.png');
+    background-repeat: no-repeat;
+    background-position: center 40%;
+    background-attachment: fixed;
+    background-size: min(70vw, 650px);
+    position: relative;
+  }
+  
+  /* Membuat logo terlihat tipis/samar agar tidak menutupi teks */
+  body::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background-color: rgba(253, 246, 236, 0.96); /* Menutup logo asli agar tersamarkan lembut */
+  }
 }
