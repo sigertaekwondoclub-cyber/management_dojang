@@ -148,6 +148,78 @@ export default function SiswaAdminPage() {
     }
   }
 
+  const handleExportCSV = () => {
+    const headers = ['Nama', 'Tanggal Lahir', 'Sabuk Saat Ini', 'Tanggal Gabung', 'No HP Ortu', 'Status Aktif', 'Program Kelas', 'Fokus Prestasi'];
+    const rows = siswaList.map(s => [
+      s.nama,
+      s.tgl_lahir,
+      s.sabuk_saat_ini,
+      s.tgl_gabung,
+      s.no_hp_ortu,
+      s.status_aktif ? 'Aktif' : 'Nonaktif',
+      s.program_kelas?.nama_program || '',
+      s.fokus_prestasi || ''
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(','), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `data_siswa_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length <= 1) return alert('File CSV kosong atau tidak valid!');
+
+        // parse simple csv
+        const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+        const importedSiswa: any[] = [];
+
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/^"|"$/g, '').trim());
+          if (cols.length < headers.length) continue;
+
+          const sObj: any = {};
+          headers.forEach((h, idx) => {
+            sObj[h] = cols[idx];
+          });
+          importedSiswa.push(sObj);
+        }
+
+        // Simpan ke Supabase
+        const payload = importedSiswa.map(s => ({
+          nama: s['nama'] || '',
+          tgl_lahir: s['tanggal lahir'] || new Date().toISOString().split('T')[0],
+          sabuk_saat_ini: s['sabuk saat ini'] || 'Putih',
+          tgl_gabung: s['tanggal gabung'] || new Date().toISOString().split('T')[0],
+          no_hp_ortu: s['no hp ortu'] || '',
+          status_aktif: s['status aktif']?.toLowerCase() === 'aktif',
+          fokus_prestasi: s['fokus prestasi'] || null,
+        }));
+
+        const { error } = await supabase.from('siswa').insert(payload);
+        if (error) throw error;
+
+        alert(`Berhasil mengimpor ${payload.length} siswa!`);
+        fetchData();
+      } catch (err: any) {
+        alert('Gagal mengimpor: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center flex-wrap gap-4">
@@ -155,7 +227,14 @@ export default function SiswaAdminPage() {
           <h1 className="text-3xl font-bold font-sans text-dark">Data Siswa</h1>
           <p className="text-dark/60 font-sans mt-1">Kelola data master anggota Taekwondo</p>
         </div>
-        <Button variant="primary" onClick={openAddForm}>➕ Tambah Siswa Manual</Button>
+        <div className="flex gap-2 flex-wrap">
+          <label className="bg-secondary border-2 border-dark rounded-xl px-4 py-2.5 font-bold font-sans text-sm cursor-pointer shadow-brutal hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-brutal-lg transition-all text-dark">
+            📥 Import CSV
+            <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
+          </label>
+          <Button variant="secondary" onClick={handleExportCSV}>📤 Export CSV</Button>
+          <Button variant="primary" onClick={openAddForm}>➕ Tambah Siswa Manual</Button>
+        </div>
       </div>
       
       {isFormOpen && (

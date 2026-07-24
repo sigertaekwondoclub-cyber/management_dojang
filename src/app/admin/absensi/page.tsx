@@ -299,12 +299,40 @@ export default function AdminAbsensiPage() {
 
           {/* Tabel Detail */}
           <Card>
-            <h2 className="font-bold font-sans text-dark mb-4">
-              Detail Absensi
+            <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+              <h2 className="font-bold font-sans text-dark">
+                Detail Absensi
+                {absensiSiswa.length > 0 && (
+                  <span className="ml-2 font-normal text-sm text-dark/50">({absensiSiswa.length} catatan)</span>
+                )}
+              </h2>
               {absensiSiswa.length > 0 && (
-                <span className="ml-2 font-normal text-sm text-dark/50">({absensiSiswa.length} catatan)</span>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    const headers = ['Tanggal', 'Nama Siswa', 'Kelas', 'Status Hadir', 'Pelatih Pengajar'];
+                    const rows = absensiSiswa.map(row => [
+                      row.tgl,
+                      row.siswa?.nama || '',
+                      row.kelas,
+                      row.status_hadir,
+                      row.pelatih?.nama || ''
+                    ]);
+                    const csvContent = "data:text/csv;charset=utf-8," 
+                      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", `absensi_siswa_${filterDari}_to_${filterSampai}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                >
+                  📤 Export CSV
+                </Button>
               )}
-            </h2>
+            </div>
             {loadingSiswa ? (
               <div className="text-center py-12 text-dark/50 font-sans">Memuat data...</div>
             ) : absensiSiswa.length === 0 ? (

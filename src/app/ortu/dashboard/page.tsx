@@ -76,12 +76,12 @@ export default function OrtuDashboardPage() {
       if (new Date(uTgl) < new Date(eTgl)) {
         nextAgenda = { jenis: 'Ujian Sabuk', nama: 'Kenaikan Tingkat', tgl: uTgl }
       } else {
-        nextAgenda = { jenis: 'Event/Kompetisi', nama: (eventData[0].event_kompetisi as any).nama, tgl: eTgl }
+        nextAgenda = { jenis: 'Event/Kompetisi', nama: (eventData?.[0]?.event_kompetisi as any)?.nama, tgl: eTgl }
       }
     } else if (uTgl) {
       nextAgenda = { jenis: 'Ujian Sabuk', nama: 'Kenaikan Tingkat', tgl: uTgl }
     } else if (eTgl) {
-      nextAgenda = { jenis: 'Event/Kompetisi', nama: (eventData[0].event_kompetisi as any).nama, tgl: eTgl }
+      nextAgenda = { jenis: 'Event/Kompetisi', nama: (eventData?.[0]?.event_kompetisi as any)?.nama, tgl: eTgl }
     }
 
     setAgenda(nextAgenda)

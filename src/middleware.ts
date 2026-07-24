@@ -52,14 +52,52 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/admin') || 
-                           request.nextUrl.pathname.startsWith('/pelatih') || 
-                           request.nextUrl.pathname.startsWith('/ortu')
+  const pathname = request.nextUrl.pathname
+  const isProtectedRoute = pathname.startsWith('/admin') || 
+                           pathname.startsWith('/pelatih') || 
+                           pathname.startsWith('/ortu')
 
   if (isProtectedRoute && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
+  }
+
+  if (user) {
+    // Ambil data profil dari database untuk memverifikasi role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const role = profile?.role
+
+    // Proteksi halaman berdasarkan role
+    if (pathname.startsWith('/admin') && role !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = role === 'pelatih' ? '/pelatih/dashboard' : role === 'ortu' ? '/ortu/dashboard' : '/'
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname.startsWith('/pelatih') && role !== 'pelatih') {
+      const url = request.nextUrl.clone()
+      url.pathname = role === 'admin' ? '/admin/dashboard' : role === 'ortu' ? '/ortu/dashboard' : '/'
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname.startsWith('/ortu') && role !== 'ortu') {
+      const url = request.nextUrl.clone()
+      url.pathname = role === 'admin' ? '/admin/dashboard' : role === 'pelatih' ? '/pelatih/dashboard' : '/'
+      return NextResponse.redirect(url)
+    }
+
+    // Jika mengakses halaman login tetapi sudah login, arahkan ke dashboard yang sesuai
+    if (pathname === '/login') {
+      const url = request.nextUrl.clone()
+      url.pathname = role === 'admin' ? '/admin/dashboard' : role === 'pelatih' ? '/pelatih/dashboard' : '/ortu/dashboard'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

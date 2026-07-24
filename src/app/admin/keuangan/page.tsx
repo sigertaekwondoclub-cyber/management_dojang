@@ -194,7 +194,7 @@ export default function AdminKeuanganPage() {
               <XAxis dataKey="name" tick={{ fontFamily: 'Inter', fontSize: 12, fill: '#1E2A38' }} />
               <YAxis tickFormatter={formatRupiahShort} tick={{ fontFamily: 'Inter', fontSize: 11, fill: '#1E2A3870' }} />
               <Tooltip
-                formatter={(value: number) => formatRupiah(value)}
+                formatter={(value: any) => formatRupiah(Number(value || 0))}
                 labelStyle={{ fontFamily: 'Inter', fontWeight: 'bold' }}
                 contentStyle={{ borderRadius: 12, border: '2px solid #1E2A38', fontFamily: 'Inter' }}
               />
@@ -257,10 +257,36 @@ export default function AdminKeuanganPage() {
 
       {/* Tabel Transaksi */}
       <Card>
-        <h2 className="font-bold font-sans text-dark mb-4 text-lg">
-          Riwayat Transaksi Manual {tahunFilter}
-          <span className="ml-2 font-normal text-sm text-dark/50">({transaksiList.length} entri)</span>
-        </h2>
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+          <h2 className="font-bold font-sans text-dark text-lg">
+            Riwayat Transaksi Manual {tahunFilter}
+            <span className="ml-2 font-normal text-sm text-dark/50">({transaksiList.length} entri)</span>
+          </h2>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              const headers = ['Tanggal', 'Jenis', 'Kategori', 'Keterangan', 'Nominal'];
+              const rows = transaksiList.map(tx => [
+                tx.tgl,
+                tx.jenis === 'income' ? 'Income' : 'Expense',
+                tx.kategori,
+                tx.keterangan,
+                tx.nominal
+              ]);
+              const csvContent = "data:text/csv;charset=utf-8," 
+                + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+              const encodedUri = encodeURI(csvContent);
+              const link = document.createElement("a");
+              link.setAttribute("href", encodedUri);
+              link.setAttribute("download", `keuangan_${tahunFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+          >
+            📤 Export CSV
+          </Button>
+        </div>
         {loading ? (
           <div className="text-center py-8 text-dark/50 font-sans">Memuat...</div>
         ) : transaksiList.length === 0 ? (

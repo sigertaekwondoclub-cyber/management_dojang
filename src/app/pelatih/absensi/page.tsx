@@ -87,7 +87,7 @@ export default function PelatihAbsensiPage() {
     }
 
     // Filter siswa yang program_kelas-nya sesuai kelas yang dipilih
-    const filtered = (siswaData || []).filter((s: Siswa & { program_kelas?: { nama_program: string } }) =>
+    const filtered = (siswaData || []).filter((s: any) =>
       s.program_kelas && programs.includes(s.program_kelas.nama_program)
     )
 
@@ -105,7 +105,7 @@ export default function PelatihAbsensiPage() {
       }
     }
 
-    const entries: AbsensiEntry[] = filtered.map((s: Siswa) => ({
+    const entries: AbsensiEntry[] = filtered.map((s: any) => ({
       siswa_id: s.id,
       nama: s.nama,
       status: existingMap[s.id] || 'hadir',
