@@ -18,10 +18,22 @@ interface AbsensiEntry {
 
 const KELAS_OPTIONS = ['Umum', 'Pomsae', 'Kyurugi']
 
-// Mapping: kelas → nama_program di program_kelas
-function kelasToProgram(kelas: string): string[] {
-  if (kelas === 'Umum') return ['Umum']
-  return ['Prestasi'] // Pomsae & Kyurugi masuk program Prestasi
+// Filter siswa berdasarkan kelas yang dipilih:
+// - Umum  : SEMUA siswa aktif (Umum + Prestasi) — siswa spesialis juga ikut latihan reguler
+// - Pomsae: hanya siswa Prestasi dengan fokus_prestasi = 'pomsae'
+// - Kyurugi: hanya siswa Prestasi dengan fokus_prestasi = 'kyurugi'
+function filterSiswaByKelas(siswaData: any[], kelas: string): any[] {
+  if (kelas === 'Umum') {
+    // Semua siswa aktif ikut kelas umum
+    return siswaData
+  } else if (kelas === 'Pomsae') {
+    // Hanya siswa dengan fokus prestasi poomsae
+    return siswaData.filter((s: any) => s.fokus_prestasi === 'pomsae')
+  } else if (kelas === 'Kyurugi') {
+    // Hanya siswa dengan fokus prestasi kyurugi
+    return siswaData.filter((s: any) => s.fokus_prestasi === 'kyurugi')
+  }
+  return siswaData
 }
 
 const STATUS_CONFIG: Record<StatusHadir, { label: string; bg: string; border: string; text: string }> = {
@@ -72,13 +84,12 @@ export default function PelatihAbsensiPage() {
     setError(null)
     setSavedOk(false)
 
-    const programs = kelasToProgram(kelas)
-
-    // Ambil siswa aktif berdasarkan program kelas
+    // Ambil semua siswa aktif beserta fokus_prestasi
     const { data: siswaData, error: siswaErr } = await supabase
       .from('siswa')
-      .select('id, nama, program_kelas_id, program_kelas:program_kelas_id(nama_program)')
+      .select('id, nama, program_kelas_id, fokus_prestasi, program_kelas:program_kelas_id(nama_program)')
       .eq('status_aktif', true)
+      .order('nama', { ascending: true })
 
     if (siswaErr) {
       setError('Gagal memuat data siswa.')
@@ -86,10 +97,10 @@ export default function PelatihAbsensiPage() {
       return
     }
 
-    // Filter siswa yang program_kelas-nya sesuai kelas yang dipilih
-    const filtered = (siswaData || []).filter((s: any) =>
-      s.program_kelas && programs.includes(s.program_kelas.nama_program)
-    )
+    // Filter siswa sesuai kelas yang dipilih dengan logika yang benar:
+    // - Umum: semua siswa (termasuk spesialis, karena mereka juga ikut latihan reguler)
+    // - Pomsae/Kyurugi: hanya siswa dengan fokus_prestasi yang sesuai
+    const filtered = filterSiswaByKelas(siswaData || [], kelas)
 
     // Cek existing absensi untuk tgl + kelas ini
     const { data: existingAbsensi } = await supabase
@@ -213,6 +224,13 @@ export default function PelatihAbsensiPage() {
         >
           {loadingSiswa ? 'Memuat...' : '🔍 Muat Daftar Siswa'}
         </Button>
+
+        {/* Keterangan logika filter */}
+        <div className="p-3 bg-background border-2 border-dark/20 rounded-xl text-xs font-sans text-dark/60 flex flex-col gap-1">
+          <p>📌 <strong className="text-dark">Kelas Umum</strong> — Menampilkan <strong>semua siswa aktif</strong> (termasuk siswa spesialis Poomsae & Kyorugi yang juga ikut latihan reguler)</p>
+          <p>🥋 <strong className="text-dark">Kelas Pomsae</strong> — Hanya siswa dengan spesialisasi Poomsae</p>
+          <p>🥊 <strong className="text-dark">Kelas Kyurugi</strong> — Hanya siswa dengan spesialisasi Kyorugi</p>
+        </div>
       </Card>
 
       {/* Daftar Siswa */}
