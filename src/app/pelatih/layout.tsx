@@ -45,6 +45,13 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
     checkAuth()
   }, [checkAuth])
 
+  useEffect(() => {
+    document.body.classList.add('hide-watermark')
+    return () => {
+      document.body.classList.remove('hide-watermark')
+    }
+  }, [])
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/login')
