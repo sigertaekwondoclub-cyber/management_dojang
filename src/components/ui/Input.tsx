@@ -17,7 +17,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <input
           id={inputId}
           ref={ref}
-          className={`border-2 border-dark rounded-2xl px-4 py-3 bg-white text-dark placeholder:text-dark/50 focus:outline-none focus:ring-2 focus:ring-primary focus:border-dark transition-colors ${className}`}
+          className={`border-2 border-dark rounded-2xl px-4 py-3 bg-white text-dark placeholder:text-dark/50 focus:outline-none focus:ring-2 focus:ring-primary focus:border-dark focus:shadow-[2px_2px_0px_#1E2A38] transition-all duration-150 ease-in-out ${className}`}
           {...props}
         />
       </div>
