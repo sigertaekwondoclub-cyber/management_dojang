@@ -70,7 +70,7 @@ export default function LoginPage() {
             <img 
               src="/logo-siger.png" 
               alt="Logo Siger Taekwondo Club" 
-              className="w-[80%] h-[80%] object-contain" 
+              className="w-full h-full object-cover" 
             />
           </div>
           <div>

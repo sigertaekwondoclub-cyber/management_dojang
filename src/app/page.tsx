@@ -16,7 +16,7 @@ export default function Home() {
             <img 
               src="/logo-siger.png" 
               alt="Logo Siger Taekwondo Club" 
-              className="w-[80%] h-[80%] object-contain" 
+              className="w-full h-full object-cover" 
             />
           </div>
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-dark drop-shadow-sm mt-2">
