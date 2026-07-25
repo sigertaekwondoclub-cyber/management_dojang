@@ -66,11 +66,11 @@ export default function LoginPage() {
     <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-background">
       <Card className="w-full max-w-md p-8 flex flex-col gap-6 items-center">
         <div className="text-center flex flex-col items-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center p-1.5 overflow-hidden">
+          <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden">
             <img 
               src="/logo-siger.png" 
               alt="Logo Siger Taekwondo Club" 
-              className="w-full h-full object-contain" 
+              className="w-[80%] h-[80%] object-contain" 
             />
           </div>
           <div>

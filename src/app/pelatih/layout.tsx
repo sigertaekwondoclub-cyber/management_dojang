@@ -88,8 +88,8 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
       {/* MOBILE HEADER */}
       <header className="md:hidden flex items-center justify-between bg-white border-b-2 border-dark px-6 py-4 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center p-1 overflow-hidden shrink-0">
-            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
+          <div className="w-10 h-10 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center overflow-hidden shrink-0">
+            <img src="/logo-siger.png" alt="Logo" className="w-[80%] h-[80%] object-contain" />
           </div>
           <div>
             <h2 className="text-lg font-bold font-sans text-dark leading-tight">Pelatih Panel</h2>
@@ -101,8 +101,8 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
       {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-64 bg-white border-r-4 border-dark p-6 flex-col">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center p-1 overflow-hidden shrink-0">
-            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
+          <div className="w-12 h-12 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center overflow-hidden shrink-0">
+            <img src="/logo-siger.png" alt="Logo" className="w-[80%] h-[80%] object-contain" />
           </div>
           <div>
             <h2 className="text-lg font-bold font-sans text-dark leading-tight">Pelatih Panel</h2>
