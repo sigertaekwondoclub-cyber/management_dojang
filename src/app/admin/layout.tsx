@@ -78,6 +78,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: '🪪 Kartu Anggota', path: '/admin/kartu' },
     { label: '🏅 Ujian Sabuk', path: '/admin/ujian' },
     { label: '🥋 Event Kompetisi', path: '/admin/event' },
+    { label: '🛒 Toko Merchant', path: '/admin/merchant' },
+    { label: '📦 Pesanan Merchant', path: '/admin/merchant/pesanan' },
     { label: '🌟 Rekap Prestasi', path: '/admin/prestasi' },
     { label: '⚙️ Pengaturan', path: '/admin/pengaturan' },
     { label: '🔑 Kelola Akun', path: '/admin/akun' },

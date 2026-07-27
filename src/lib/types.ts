@@ -181,4 +181,60 @@ export interface EventPeserta {
   event_kompetisi?: Pick<EventKompetisi, 'nama' | 'tgl' | 'lokasi'>
 }
 
+export type KategoriMerchant = 'Seragam' | 'Aksesoris' | 'Perlengkapan'
+export type StatusPesanan = 'menunggu_pembayaran' | 'lunas' | 'diproses' | 'siap_diambil'
+
+export interface ProdukMerchant {
+  id: string
+  nama: string
+  kategori: KategoriMerchant
+  harga: number
+  deskripsi: string | null
+  foto_url: string | null
+  status_aktif: boolean
+  created_at: string
+  produk_varian?: ProdukVarian[]
+}
+
+export interface ProdukVarian {
+  id: string
+  produk_id: string
+  ukuran: string
+  stok: number
+  created_at: string
+}
+
+export interface PesananMerchant {
+  id: string
+  siswa_id: string
+  total_harga: number
+  status: StatusPesanan
+  bukti_transfer_url: string | null
+  catatan_admin: string | null
+  created_at: string
+  updated_at: string
+  siswa?: Pick<Siswa, 'nama'>
+  pesanan_item?: PesananItemWithDetail[]
+}
+
+export interface PesananItem {
+  id: string
+  pesanan_id: string
+  produk_id: string
+  varian_id: string
+  qty: number
+  harga_satuan: number
+}
+
+export interface PesananItemWithDetail extends PesananItem {
+  produk_merchant?: Pick<ProdukMerchant, 'nama' | 'foto_url'>
+  produk_varian?: Pick<ProdukVarian, 'ukuran'>
+}
+
+export interface KeranjangItem {
+  produk: ProdukMerchant
+  varian: ProdukVarian
+  qty: number
+}
+
 export { createClient }

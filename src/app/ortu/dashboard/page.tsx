@@ -5,13 +5,21 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
-import type { Siswa, Iuran } from '@/lib/types'
+import type { Siswa, Iuran, StatusPesanan } from '@/lib/types'
+
+const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
+  menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
+  lunas:               { label: 'Lunas',           color: 'secondary' },
+  diproses:            { label: 'Diproses',         color: 'dark' },
+  siap_diambil:        { label: 'Siap Diambil ✅',  color: 'primary' },
+}
 
 export default function OrtuDashboardPage() {
   const [siswa, setSiswa] = useState<Siswa | null>(null)
   const [iuran, setIuran] = useState<Iuran | null>(null)
   const [kehadiran, setKehadiran] = useState({ persen: 0, hadir: 0, total: 0 })
   const [agenda, setAgenda] = useState<{jenis: string, nama: string, tgl: string} | null>(null)
+  const [pesananTerbaru, setPesananTerbaru] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
 
   const supabase = createClient()
@@ -46,16 +54,22 @@ export default function OrtuDashboardPage() {
       iuranResult,
       absensiResult,
       ujianResult,
-      eventResult
+      eventResult,
+      pesananResult
     ] = await Promise.all([
       supabase.from('iuran').select('*').eq('siswa_id', profile.siswa_id).eq('bulan', bulan).eq('tahun', tahun).maybeSingle(),
       supabase.from('absensi_siswa').select('id, status_hadir').eq('siswa_id', profile.siswa_id).gte('tgl', startDate).lte('tgl', endDate),
       supabase.from('ujian_sabuk').select('tgl_ujian').eq('siswa_id', profile.siswa_id).gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
-      supabase.from('event_peserta').select('event_kompetisi!inner(nama, tgl)').eq('siswa_id', profile.siswa_id).eq('status_daftar', 'terdaftar').gte('event_kompetisi.tgl', today).order('event_kompetisi(tgl)', { ascending: true }).limit(1)
+      supabase.from('event_peserta').select('event_kompetisi!inner(nama, tgl)').eq('siswa_id', profile.siswa_id).eq('status_daftar', 'terdaftar').gte('event_kompetisi.tgl', today).order('event_kompetisi(tgl)', { ascending: true }).limit(1),
+      supabase.from('pesanan_merchant').select('id, status, total_harga, created_at').eq('siswa_id', profile.siswa_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
     ])
 
     const iData = iuranResult.data
     setIuran(iData as Iuran)
+
+    if (pesananResult.data) {
+      setPesananTerbaru(pesananResult.data)
+    }
 
     const absensiList = absensiResult.data
     const totalPertemuan = absensiList?.length || 0
@@ -95,6 +109,10 @@ export default function OrtuDashboardPage() {
 
   const iuranStatusText = iuran?.status_bayar === 'lunas' ? 'Lunas' : iuran?.status_bayar === 'menunggu_verifikasi' ? 'Menunggu Verifikasi' : 'Belum Bayar'
   const iuranColor = iuran?.status_bayar === 'lunas' ? 'primary' : iuran?.status_bayar === 'menunggu_verifikasi' ? 'secondary' : 'accent'
+
+  function formatRupiah(n: number) {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto">
@@ -169,6 +187,23 @@ export default function OrtuDashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* Pesanan Terbaru */}
+      {pesananTerbaru && (
+        <Link href="/ortu/merchant/pesanan">
+          <Card hoverable className="border-2 border-dark p-4 cursor-pointer">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-dark text-sm">🛒 Pesanan Terbaru</p>
+                <p className="text-primary font-bold mt-0.5">{formatRupiah(pesananTerbaru.total_harga)}</p>
+              </div>
+              <Badge color={STATUS_CONFIG_PESANAN[pesananTerbaru.status as StatusPesanan]?.color || 'dark'}>
+                {STATUS_CONFIG_PESANAN[pesananTerbaru.status as StatusPesanan]?.label || pesananTerbaru.status}
+              </Badge>
+            </div>
+          </Card>
+        </Link>
+      )}
 
       {/* Agenda Mendatang */}
       <Card className="border-2 border-dark">
