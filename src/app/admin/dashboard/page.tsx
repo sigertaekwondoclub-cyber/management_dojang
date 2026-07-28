@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
 
 function formatRupiah(n: number) {
@@ -17,11 +18,14 @@ export default function AdminDashboardPage() {
     iuranTerkumpul: 0,
     tagihanMenunggu: 0,
     daftarBaru: 0,
+    pesananMerchantMenunggu: 0,
+    merchantPemasukan: 0,
     income: 0,
     expense: 0
   })
   const [ujianMendatang, setUjianMendatang] = useState<any>(null)
   const [eventMendatang, setEventMendatang] = useState<any>(null)
+  const [stokKritis, setStokKritis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const supabase = createClient()
@@ -42,7 +46,10 @@ export default function AdminDashboardPage() {
       cashflowResult,
       honorResult,
       ujianResult,
-      eventResult
+      eventResult,
+      merchantMenungguResult,
+      merchantOmzetResult,
+      stokResult
     ] = await Promise.all([
       supabase.from('siswa').select('status_aktif'),
       supabase.from('pendaftaran_siswa').select('id').eq('status', 'pending'),
@@ -51,7 +58,10 @@ export default function AdminDashboardPage() {
       supabase.from('keuangan_club').select('jenis, nominal').gte('tgl', `${tahun}-${String(bulan).padStart(2, '0')}-01`),
       supabase.from('honor_pelatih').select('honor_diterima').eq('tahun', tahun).eq('bulan', bulan).eq('status_dibayar', true),
       supabase.from('ujian_sabuk').select('tgl_ujian').gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
-      supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1)
+      supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1),
+      supabase.from('pesanan_merchant').select('id', { count: 'exact', head: true }).eq('status', 'menunggu_pembayaran'),
+      supabase.from('pesanan_merchant').select('total_harga').in('status', ['lunas', 'diproses', 'siap_diambil']),
+      supabase.from('produk_varian').select('ukuran, stok, produk_merchant(nama)').lte('stok', 5)
     ])
 
     const siswaData = siswaResult.data
@@ -72,8 +82,10 @@ export default function AdminDashboardPage() {
       if (i.status_bayar === 'menunggu_verifikasi') tagihanMenunggu++
     })
 
+    const merchantPemasukan = (merchantOmzetResult.data || []).reduce((acc, curr) => acc + Number(curr.total_harga), 0)
+
     const cashflow = cashflowResult.data
-    let income = iuranTerkumpul
+    let income = iuranTerkumpul + merchantPemasukan
     let expense = 0
     cashflow?.forEach(c => {
       if (c.jenis === 'income') income += Number(c.nominal)
@@ -93,11 +105,14 @@ export default function AdminDashboardPage() {
       iuranTerkumpul,
       tagihanMenunggu,
       daftarBaru,
+      pesananMerchantMenunggu: merchantMenungguResult.count || 0,
+      merchantPemasukan,
       income,
       expense
     })
     setUjianMendatang(uData?.[0] || null)
     setEventMendatang(eData?.[0] || null)
+    setStokKritis((stokResult.data || []) as any[])
 
     setLoading(false)
   }, [supabase])
@@ -110,14 +125,15 @@ export default function AdminDashboardPage() {
   if (loading) return <div className="p-8 text-center text-dark/50 font-bold font-sans">Memuat Dashboard...</div>
 
   return (
-    <div className="flex flex-col gap-6 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-10">
       <div>
         <h1 className="text-3xl font-bold font-sans text-dark">🏠 Dashboard Admin</h1>
         <p className="text-dark/60 font-sans mt-1">Ringkasan aktivitas Siger Taekwondo Club</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Siswa & Pelatih */}
+      {/* Grid Metrik Utama */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Siswa */}
         <Card className="p-6 border-2 border-dark bg-[#BBF7D0] hover:-translate-y-1 transition-transform">
           <div className="flex justify-between items-start">
             <div>
@@ -128,6 +144,7 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
         
+        {/* Pelatih */}
         <Card className="p-6 border-2 border-dark bg-[#BFDBFE] hover:-translate-y-1 transition-transform">
           <div className="flex justify-between items-start">
             <div>
@@ -138,7 +155,7 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
 
-        {/* Action Items */}
+        {/* Pendaftaran Siswa */}
         <Link href="/admin/pendaftaran" className="block outline-none">
           <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.daftarBaru > 0 ? 'bg-[#FDE68A]' : 'bg-white'}`}>
             <div className="flex justify-between items-start">
@@ -152,6 +169,7 @@ export default function AdminDashboardPage() {
           </Card>
         </Link>
 
+        {/* Verifikasi Iuran */}
         <Link href="/admin/iuran" className="block outline-none">
           <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.tagihanMenunggu > 0 ? 'bg-[#FECACA]' : 'bg-white'}`}>
             <div className="flex justify-between items-start">
@@ -164,9 +182,128 @@ export default function AdminDashboardPage() {
             {stats.tagihanMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3">Butuh pengecekan →</div>}
           </Card>
         </Link>
+
+        {/* Verifikasi Pesanan Merchant */}
+        <Link href="/admin/merchant/pesanan" className="block outline-none">
+          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.pesananMerchantMenunggu > 0 ? 'bg-accent' : 'bg-white'}`}>
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="text-sm font-sans font-bold text-dark/60">Pesanan Baru</div>
+                <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.pesananMerchantMenunggu}</div>
+              </div>
+              <div className="text-4xl opacity-80">🛒</div>
+            </div>
+            {stats.pesananMerchantMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3">Perlu diproses →</div>}
+          </Card>
+        </Link>
       </div>
 
+      {/* Grid Grafik & Visualisasi */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* BAR CHART: Cashflow Bulanan (Income vs Merchant vs Expense) */}
+        <Card className="flex flex-col gap-4 border-2 border-dark p-6">
+          <div>
+            <h2 className="font-bold font-sans text-dark text-lg">Statistik Cashflow Bulan Ini</h2>
+            <p className="text-xs text-dark/60">Perbandingan data kas masuk & keluar</p>
+          </div>
+          
+          <div className="w-full flex items-center justify-center py-4 bg-background border-2 border-dark rounded-xl">
+            {/* SVG Bar Chart */}
+            <svg viewBox="0 0 400 240" className="w-full max-w-[400px]">
+              {/* Grid Lines */}
+              <line x1="40" y1="40" x2="360" y2="40" stroke="#E2E8F0" strokeDasharray="3" />
+              <line x1="40" y1="90" x2="360" y2="90" stroke="#E2E8F0" strokeDasharray="3" />
+              <line x1="40" y1="140" x2="360" y2="140" stroke="#E2E8F0" strokeDasharray="3" />
+              <line x1="40" y1="190" x2="360" y2="190" stroke="#1E2A38" strokeWidth="2" />
+              
+              {/* Max Value Estimation */}
+              {(() => {
+                const maxVal = Math.max(stats.income - stats.merchantPemasukan, stats.merchantPemasukan, stats.expense, 100000);
+                const scale = 140 / maxVal;
+                const h1 = (stats.income - stats.merchantPemasukan) * scale;
+                const h2 = stats.merchantPemasukan * scale;
+                const h3 = stats.expense * scale;
+
+                return (
+                  <>
+                    {/* Bar 1: Pemasukan Iuran */}
+                    <rect x="75" y={190 - h1} width="40" height={h1} fill="#BBF7D0" stroke="#1E2A38" strokeWidth="2" className="shadow-brutal-sm" />
+                    <text x="95" y="210" fontSize="10" fontWeight="bold" textAnchor="middle" fill="#1E2A38">Iuran</text>
+                    <text x="95" y={180 - h1} fontSize="9" fontWeight="bold" textAnchor="middle" fill="#1E2A38">{formatRupiah(stats.income - stats.merchantPemasukan)}</text>
+
+                    {/* Bar 2: Merchant Pemasukan */}
+                    <rect x="180" y={190 - h2} width="40" height={h2} fill="#BFDBFE" stroke="#1E2A38" strokeWidth="2" />
+                    <text x="200" y="210" fontSize="10" fontWeight="bold" textAnchor="middle" fill="#1E2A38">Toko</text>
+                    <text x="200" y={180 - h2} fontSize="9" fontWeight="bold" textAnchor="middle" fill="#1E2A38">{formatRupiah(stats.merchantPemasukan)}</text>
+
+                    {/* Bar 3: Pengeluaran */}
+                    <rect x="285" y={190 - h3} width="40" height={h3} fill="#FECACA" stroke="#1E2A38" strokeWidth="2" />
+                    <text x="305" y="210" fontSize="10" fontWeight="bold" textAnchor="middle" fill="#1E2A38">Keluar</text>
+                    <text x="305" y={180 - h3} fontSize="9" fontWeight="bold" textAnchor="middle" fill="#1E2A38">{formatRupiah(stats.expense)}</text>
+                  </>
+                );
+              })()}
+            </svg>
+          </div>
+        </Card>
+
+        {/* DONUT CHART: Distribusi Pemasukan */}
+        <Card className="flex flex-col gap-4 border-2 border-dark p-6">
+          <div>
+            <h2 className="font-bold font-sans text-dark text-lg">Distribusi Pemasukan</h2>
+            <p className="text-xs text-dark/60">Persentase Iuran vs Toko Merchant</p>
+          </div>
+
+          <div className="w-full flex flex-col sm:flex-row items-center justify-around py-4 bg-background border-2 border-dark rounded-xl gap-4">
+            {/* SVG Donut Chart */}
+            {(() => {
+              const iuran = stats.income - stats.merchantPemasukan;
+              const merchant = stats.merchantPemasukan;
+              const total = iuran + merchant || 1;
+              const pctIuran = Math.round((iuran / total) * 100);
+              const pctMerchant = Math.round((merchant / total) * 100);
+
+              // Donut calculations (radius = 50, circumference = 2 * pi * r = 314)
+              const circ = 314;
+              const dashIuran = (pctIuran / 100) * circ;
+              const dashMerchant = (pctMerchant / 100) * circ;
+
+              return (
+                <>
+                  <svg viewBox="0 0 160 160" className="w-32 h-32 transform -rotate-90">
+                    <circle cx="80" cy="80" r="50" fill="transparent" stroke="#1E2A38" strokeWidth="30" />
+                    {/* Slice 1: Iuran */}
+                    <circle cx="80" cy="80" r="50" fill="transparent" stroke="#BBF7D0" strokeWidth="26"
+                      strokeDasharray={`${dashIuran} ${circ}`} strokeDashoffset={0} />
+                    {/* Slice 2: Merchant */}
+                    {merchant > 0 && (
+                      <circle cx="80" cy="80" r="50" fill="transparent" stroke="#BFDBFE" strokeWidth="26"
+                        strokeDasharray={`${dashMerchant} ${circ}`} strokeDashoffset={-dashIuran} />
+                    )}
+                    {/* Inner hole spacer */}
+                    <circle cx="80" cy="80" r="37" fill="#FBFBFB" stroke="#1E2A38" strokeWidth="2" />
+                  </svg>
+
+                  <div className="flex flex-col gap-3 font-sans">
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 border border-dark rounded bg-[#BBF7D0]" />
+                      <span className="text-xs font-bold text-dark">Iuran Bulanan ({pctIuran}%)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-4 h-4 border border-dark rounded bg-[#BFDBFE]" />
+                      <span className="text-xs font-bold text-dark">Toko Merchant ({pctMerchant}%)</span>
+                    </div>
+                    <div className="border-t border-dark/10 pt-2 text-xs font-bold text-dark/70">
+                      Total Kas Masuk: {formatRupiah(total)}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
+
         {/* Iuran Progress */}
         <Card className="flex flex-col gap-4">
           <h2 className="font-bold font-sans text-dark text-lg">Pemasukan Iuran Bulan Ini</h2>
@@ -240,6 +377,27 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* ALERT STOK KRITIS */}
+      {stokKritis.length > 0 && (
+        <Card className="border-4 border-dark bg-accent shadow-brutal p-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-2xl">⚠️</span>
+            <h3 className="font-bold text-dark text-lg">Peringatan: Stok Produk Hampir Habis!</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {stokKritis.map((item, idx) => (
+              <div key={idx} className="bg-white border-2 border-dark rounded-xl p-3 flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-dark text-sm truncate max-w-[150px]">{(item.produk_merchant as any)?.nama}</p>
+                  <p className="text-dark/60 text-xs">Varian: {item.ukuran}</p>
+                </div>
+                <Badge color="dark" className="text-xs">{item.stok} Tersisa</Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
