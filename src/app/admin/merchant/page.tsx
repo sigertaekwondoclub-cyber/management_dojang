@@ -108,9 +108,14 @@ export default function AdminMerchantPage() {
           deskripsi: form.deskripsi || null
         }
         if (foto_url) payload.foto_url = foto_url
-        await supabase.from('produk_merchant').update(payload).eq('id', editId)
-        await supabase.from('produk_varian').delete().eq('produk_id', editId)
-        await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: editId, ukuran: v.ukuran, stok: v.stok })))
+        const { error: err } = await supabase.from('produk_merchant').update(payload).eq('id', editId)
+        if (err) throw err
+        
+        const { error: delErr } = await supabase.from('produk_varian').delete().eq('produk_id', editId)
+        if (delErr) throw delErr
+        
+        const { error: insErr } = await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: editId, ukuran: v.ukuran, stok: v.stok })))
+        if (insErr) throw insErr
       } else {
         const { data: p, error: err } = await supabase.from('produk_merchant')
           .insert({
@@ -123,11 +128,12 @@ export default function AdminMerchantPage() {
           })
           .select().single()
         if (err || !p) {
-          setError('Gagal menyimpan produk.')
+          setError('Gagal menyimpan produk: ' + (err?.message || 'Data tidak kembali setelah insert.'))
           setSaving(false)
           return
         }
-        await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: p.id, ukuran: v.ukuran, stok: v.stok })))
+        const { error: insErr } = await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: p.id, ukuran: v.ukuran, stok: v.stok })))
+        if (insErr) throw insErr
       }
       setShowModal(false)
       fetchProduk()
@@ -190,11 +196,17 @@ export default function AdminMerchantPage() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="bg-white border-4 border-dark shadow-brutal rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-bold font-sans text-dark mb-6">{editId ? '✏️ Edit Produk' : '➕ Tambah Produk'}</h2>
-            {error && <div className="bg-red-100 border-2 border-red-400 rounded-xl p-3 mb-4 text-red-700 text-sm font-bold">{error}</div>}
+          <div className="bg-white border-4 border-dark shadow-brutal rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col p-6" onClick={e => e.stopPropagation()}>
+            {/* Header Modal - Fixed */}
+            <div className="shrink-0 mb-4 border-b-2 border-dark/10 pb-2">
+              <h2 className="text-xl font-bold font-sans text-dark">{editId ? '✏️ Edit Produk' : '➕ Tambah Produk'}</h2>
+            </div>
             
-            <div className="flex flex-col gap-4">
+            {/* Error Message - Scrollable or top-fixed */}
+            {error && <div className="bg-red-100 border-2 border-red-400 rounded-xl p-3 mb-4 text-red-700 text-sm font-bold shrink-0">{error}</div>}
+            
+            {/* Form Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto pr-1 flex flex-col gap-4">
               <div>
                 <label className="block font-bold text-dark text-sm mb-1">Nama Produk *</label>
                 <Input value={form.nama} onChange={e => setForm(p => ({ ...p, nama: e.target.value }))} placeholder="e.g. Kaos Club Siger" />
@@ -233,7 +245,9 @@ export default function AdminMerchantPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
+
+            {/* Footer Buttons - Fixed */}
+            <div className="shrink-0 flex gap-3 mt-6 border-t-2 border-dark/10 pt-4">
               <Button variant="primary" onClick={handleSave} disabled={saving} className="flex-1">{saving ? 'Menyimpan...' : 'Simpan Produk'}</Button>
               <Button variant="secondary" onClick={() => setShowModal(false)}>Batal</Button>
             </div>
