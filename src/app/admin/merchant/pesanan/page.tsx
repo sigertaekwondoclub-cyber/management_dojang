@@ -11,11 +11,12 @@ const supabase = createClient()
 
 const STATUS_CONFIG: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
   menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
+  menunggu_verifikasi: { label: 'Menunggu Verifikasi', color: 'accent' },
   lunas:               { label: 'Lunas',           color: 'secondary' },
   diproses:            { label: 'Diproses',         color: 'dark' },
   siap_diambil:        { label: 'Siap Diambil',     color: 'primary' },
 }
-const STATUS_FLOW: StatusPesanan[] = ['menunggu_pembayaran', 'lunas', 'diproses', 'siap_diambil']
+const STATUS_FLOW: StatusPesanan[] = ['menunggu_pembayaran', 'menunggu_verifikasi', 'lunas', 'diproses', 'siap_diambil']
 
 function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)

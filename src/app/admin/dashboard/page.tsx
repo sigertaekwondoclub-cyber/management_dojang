@@ -59,7 +59,7 @@ export default function AdminDashboardPage() {
       supabase.from('honor_pelatih').select('honor_diterima').eq('tahun', tahun).eq('bulan', bulan).eq('status_dibayar', true),
       supabase.from('ujian_sabuk').select('tgl_ujian').gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
       supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1),
-      supabase.from('pesanan_merchant').select('id', { count: 'exact', head: true }).eq('status', 'menunggu_pembayaran'),
+      supabase.from('pesanan_merchant').select('id', { count: 'exact', head: true }).eq('status', 'menunggu_verifikasi'),
       supabase.from('pesanan_merchant').select('total_harga').in('status', ['lunas', 'diproses', 'siap_diambil']),
       supabase.from('produk_varian').select('ukuran, stok, produk_merchant(nama)').lte('stok', 5)
     ])

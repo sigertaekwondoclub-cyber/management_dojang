@@ -199,7 +199,7 @@ export interface EventPeserta {
 }
 
 export type KategoriMerchant = 'Seragam' | 'Aksesoris' | 'Perlengkapan'
-export type StatusPesanan = 'menunggu_pembayaran' | 'lunas' | 'diproses' | 'siap_diambil'
+export type StatusPesanan = 'menunggu_pembayaran' | 'menunggu_verifikasi' | 'lunas' | 'diproses' | 'siap_diambil'
 
 export interface ProdukMerchant {
   id: string

@@ -11,6 +11,7 @@ const supabase = createClient()
 
 const STATUS_CONFIG: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
   menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
+  menunggu_verifikasi: { label: 'Menunggu Verifikasi', color: 'accent' },
   lunas:               { label: 'Lunas',           color: 'secondary' },
   diproses:            { label: 'Diproses',         color: 'dark' },
   siap_diambil:        { label: 'Siap Diambil ✅',  color: 'primary' },
@@ -61,7 +62,7 @@ export default function OrtuPesananMerchantPage() {
       return
     }
     const url = supabase.storage.from('merchant').getPublicUrl(up.path).data.publicUrl
-    await supabase.from('pesanan_merchant').update({ bukti_transfer_url: url }).eq('id', selected.id)
+    await supabase.from('pesanan_merchant').update({ bukti_transfer_url: url, status: 'menunggu_verifikasi' }).eq('id', selected.id)
     setUploading(false)
     setSelected(null)
     fetchPesanan()
@@ -123,7 +124,7 @@ export default function OrtuPesananMerchantPage() {
               </div>
             )}
 
-            {selected.status === 'menunggu_pembayaran' && (
+            {(selected.status === 'menunggu_pembayaran' || selected.status === 'menunggu_verifikasi') && (
               <div className="mb-4">
                 <label className="block font-bold text-dark text-sm mb-2">
                   {selected.bukti_transfer_url ? 'Ganti Bukti Transfer' : 'Upload Bukti Transfer'}

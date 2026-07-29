@@ -9,6 +9,7 @@ import type { Siswa, Iuran, StatusPesanan } from '@/lib/types'
 
 const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
   menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
+  menunggu_verifikasi: { label: 'Menunggu Verifikasi', color: 'accent' },
   lunas:               { label: 'Lunas',           color: 'secondary' },
   diproses:            { label: 'Diproses',         color: 'dark' },
   siap_diambil:        { label: 'Siap Diambil ✅',  color: 'primary' },

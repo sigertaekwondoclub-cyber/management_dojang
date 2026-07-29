@@ -104,7 +104,7 @@ export default function KeranjangPage() {
     }
 
     const url = supabase.storage.from('merchant').getPublicUrl(up.path).data.publicUrl
-    await supabase.from('pesanan_merchant').update({ bukti_transfer_url: url }).eq('id', pesananId)
+    await supabase.from('pesanan_merchant').update({ bukti_transfer_url: url, status: 'menunggu_verifikasi' }).eq('id', pesananId)
     setUploadingBukti(false)
     router.push('/ortu/merchant/pesanan')
   }
