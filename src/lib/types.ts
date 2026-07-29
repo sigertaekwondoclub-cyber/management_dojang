@@ -114,7 +114,24 @@ export interface KartuAnggota {
 
 export interface PengaturanClub {
   id: string
+  // Honor
   persentase_pool_honor: number
+  // Identitas Club
+  nama_club: string | null
+  alamat_dojo: string | null
+  kontak_wa: string | null
+  kontak_email: string | null
+  logo_url: string | null
+  // Rekening Utama (Iuran)
+  rekening_bank: string | null
+  rekening_nomor: string | null
+  rekening_atas_nama: string | null
+  // Rekening Merchant
+  merchant_bank: string | null
+  merchant_nomor: string | null
+  merchant_atas_nama: string | null
+  // Iuran
+  iuran_default: number | null
   updated_at: string
 }
 
