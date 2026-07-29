@@ -23,9 +23,12 @@ export interface Siswa {
   id: string
   nama: string
   tgl_lahir: string
+  tempat_lahir?: string | null
   sabuk_saat_ini: string
   tgl_gabung: string
   no_hp_ortu: string
+  berat_badan?: number | null
+  alamat?: string | null
   status_aktif: boolean
   foto_url?: string
   no_kartu?: string
@@ -51,10 +54,14 @@ export interface PendaftaranSiswa {
   id: string
   nama_calon_siswa: string
   tgl_lahir: string
+  tempat_lahir?: string | null
   nama_ortu: string
   no_hp_ortu: string
   program_kelas_id?: string
   fokus_prestasi?: 'pomsae' | 'kyurugi' | null
+  berat_badan?: number | null
+  sabuk_pendaftaran?: string | null
+  alamat?: string | null
   tgl_daftar: string
   status: 'pending' | 'diterima' | 'ditolak'
   catatan_admin?: string

@@ -60,10 +60,13 @@ export default function PendaftaranAdminPage() {
       const { error: insertError } = await supabase.from('siswa').insert([{
         nama: item.nama_calon_siswa,
         tgl_lahir: item.tgl_lahir,
+        tempat_lahir: item.tempat_lahir || null,
         no_hp_ortu: item.no_hp_ortu,
         program_kelas_id: item.program_kelas_id,
         fokus_prestasi: item.fokus_prestasi || null,
-        sabuk_saat_ini: 'Putih',
+        sabuk_saat_ini: item.sabuk_pendaftaran || 'Putih',
+        berat_badan: item.berat_badan || null,
+        alamat: item.alamat || null,
         tgl_gabung: new Date().toISOString().split('T')[0],
         status_aktif: true,
       }])
@@ -159,7 +162,17 @@ export default function PendaftaranAdminPage() {
               <div className="text-sm text-dark/70 flex flex-col gap-1.5 font-sans">
                 <div className="flex justify-between">
                   <span className="text-dark/50">Tgl Lahir</span>
-                  <span className="font-bold">{item.tgl_lahir}</span>
+                  <span className="font-bold">{item.tempat_lahir ? `${item.tempat_lahir}, ` : ''}{item.tgl_lahir}</span>
+                </div>
+                {item.berat_badan && (
+                  <div className="flex justify-between">
+                    <span className="text-dark/50">Berat Badan</span>
+                    <span className="font-bold">{item.berat_badan} kg</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-dark/50">Sabuk</span>
+                  <span className="font-bold">{item.sabuk_pendaftaran || 'Putih'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-dark/50">Orang Tua</span>
@@ -169,6 +182,12 @@ export default function PendaftaranAdminPage() {
                   <span className="text-dark/50">No HP</span>
                   <span className="font-bold">{item.no_hp_ortu}</span>
                 </div>
+                {item.alamat && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-dark/50 shrink-0">Alamat</span>
+                    <span className="font-bold text-right text-xs">{item.alamat}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-dark/50">Program</span>
                   <span className="font-bold">{item.program_kelas?.nama_program || '-'}</span>
