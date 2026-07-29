@@ -22,6 +22,14 @@ export default function KeranjangPage() {
   const [buktiFile, setBuktiFile] = useState<File | null>(null)
   const [uploadingBukti, setUploadingBukti] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // State Rekening
+  const [bankInfo, setBankInfo] = useState({
+    bank: 'BCA',
+    nomor: '1234567890',
+    atasNama: 'Siger Taekwondo Club'
+  })
+
   const router = useRouter()
 
   useEffect(() => {
@@ -30,6 +38,18 @@ export default function KeranjangPage() {
       supabase.from('profiles').select('siswa_id').eq('id', user.id).single()
         .then(({ data }) => setSiswaId(data?.siswa_id || null))
     })
+
+    // Fetch rekening dari pengaturan_club
+    supabase.from('pengaturan_club').select('*').limit(1).single()
+      .then(({ data }) => {
+        if (data) {
+          // Gunakan rekening merchant jika diisi, jika tidak gunakan rekening utama iuran
+          const bank = data.merchant_bank || data.rekening_bank || 'BCA'
+          const nomor = data.merchant_nomor || data.rekening_nomor || '1234567890'
+          const atasNama = data.merchant_atas_nama || data.rekening_atas_nama || 'Siger Taekwondo Club'
+          setBankInfo({ bank, nomor, atasNama })
+        }
+      })
   }, [])
 
   const handleCheckout = async () => {
@@ -98,8 +118,8 @@ export default function KeranjangPage() {
           <p className="text-dark/60 mb-6">Silakan transfer dan upload bukti pembayaran.</p>
           <div className="bg-background border-2 border-dark rounded-xl p-4 mb-6 text-left">
             <p className="font-bold text-dark text-sm mb-1">Transfer ke:</p>
-            <p className="text-dark font-bold text-lg">BCA · 1234567890</p>
-            <p className="text-dark/60 text-sm">a/n Siger Taekwondo Club</p>
+            <p className="text-dark font-bold text-lg">{bankInfo.bank} · {bankInfo.nomor}</p>
+            <p className="text-dark/60 text-sm">a/n {bankInfo.atasNama}</p>
             <div className="border-t border-dark/20 mt-3 pt-3">
               <p className="text-dark font-bold">Total: {formatRupiah(pesananTotal)}</p>
             </div>
