@@ -43,6 +43,8 @@ export interface Siswa {
 export interface Pelatih {
   id: string
   nama: string
+  role: 'head_coach' | 'core_coach' | 'assistant_coach'
+  is_founder: boolean
   sabuk: string
   no_hp: string
   tgl_gabung: string
@@ -123,6 +125,11 @@ export interface PengaturanClub {
   id: string
   // Honor
   persentase_pool_honor: number
+  pct_coach_pool: number | null
+  pct_operational: number | null
+  pct_reserve: number | null
+  pct_development: number | null
+  pct_founder_margin: number | null
   // Identitas Club
   nama_club: string | null
   alamat_dojo: string | null
@@ -157,6 +164,37 @@ export interface HonorPelatih {
   tgl_dibayar: string | null
   created_at: string
   pelatih?: Pick<Pelatih, 'nama'>
+}
+
+export interface PayrollRun {
+  id: string
+  bulan: number
+  tahun: number
+  total_income: number
+  coach_pool_amount: number
+  operational_amount: number
+  reserve_amount: number
+  development_amount: number
+  founder_margin_amount: number
+  generated_at: string
+}
+
+export interface PayrollDetail {
+  id: string
+  payroll_run_id: string
+  pelatih_id: string
+  sessions_taught: number
+  teaching_honor: number
+  founder_margin_share: number
+  total_payout: number
+  status_dibayar: boolean
+  tgl_dibayar: string | null
+  created_at: string
+  pelatih?: {
+    nama: string
+    role: 'head_coach' | 'core_coach' | 'assistant_coach'
+    is_founder: boolean
+  }
 }
 
 export interface KeuanganClub {

@@ -131,6 +131,24 @@ export default function AdminDashboardPage() {
         <p className="text-dark/60 font-sans mt-1">Ringkasan aktivitas Siger Taekwondo Club</p>
       </div>
 
+      {/* Banner Milestone Growth Pelatih */}
+      {stats.siswaAktif >= 30 && (
+        <div className="bg-[#BFDBFE] border-4 border-dark p-5 rounded-2xl shadow-brutal flex items-center gap-4">
+          <div className="text-3xl">🚀</div>
+          <div>
+            <h4 className="font-bold text-dark font-sans text-lg">Milestone Pertumbuhan Klub!</h4>
+            <p className="text-dark/80 text-sm font-sans mt-0.5">
+              {stats.siswaAktif >= 50 
+                ? "Coach pool cukup besar (≥ 50 siswa aktif), evaluasi skema gaji semi-tetap untuk pelatih inti."
+                : stats.siswaAktif >= 40
+                ? "Pertimbangkan promosi asisten pelatih jadi pelatih inti dibayar (≥ 40 siswa aktif)."
+                : "Coach pool sudah stabil (≥ 30 siswa aktif), evaluasi kenaikan rate per sesi."
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Grid Metrik Utama */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Siswa */}

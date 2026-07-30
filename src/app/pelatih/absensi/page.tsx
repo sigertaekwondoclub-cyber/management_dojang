@@ -139,6 +139,15 @@ export default function PelatihAbsensiPage() {
     setError(null)
     setSavedOk(false)
 
+    // Ambil program kelas untuk mencari id yang sesuai
+    const { data: programKelasList } = await supabase.from('program_kelas').select('id, nama_program')
+    let matchedClassId = null
+    if (programKelasList) {
+      const targetName = kelas === 'Umum' ? 'Umum' : 'Prestasi'
+      const found = programKelasList.find(p => p.nama_program.toLowerCase().includes(targetName.toLowerCase()))
+      if (found) matchedClassId = found.id
+    }
+
     // Upsert absensi_siswa (bulk)
     const absensiRows = siswaList.map(e => ({
       tgl: tanggal,
@@ -165,7 +174,13 @@ export default function PelatihAbsensiPage() {
     const { error: pelatihErr } = await supabase
       .from('absensi_pelatih')
       .upsert(
-        { tgl: tanggal, pelatih_id: pelatihId, kelas, jam_masuk: jamMasuk },
+        { 
+          tgl: tanggal, 
+          pelatih_id: pelatihId, 
+          kelas, 
+          jam_masuk: jamMasuk,
+          program_kelas_id: matchedClassId 
+        },
         { onConflict: 'tgl,pelatih_id,kelas' }
       )
 

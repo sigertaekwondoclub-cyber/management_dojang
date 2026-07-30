@@ -14,7 +14,12 @@ const BANK_OPTIONS = ['BCA', 'BRI', 'BNI', 'Mandiri', 'BSI', 'CIMB Niaga', 'Perm
 type FormState = Omit<PengaturanClub, 'id' | 'updated_at'>
 
 const EMPTY_FORM: FormState = {
-  persentase_pool_honor: 40,
+  persentase_pool_honor: 45,
+  pct_coach_pool: 0.45,
+  pct_operational: 0.18,
+  pct_reserve: 0.17,
+  pct_development: 0.12,
+  pct_founder_margin: 0.08,
   nama_club: '',
   alamat_dojo: '',
   kontak_wa: '',
@@ -42,7 +47,12 @@ export default function AdminPengaturanPage() {
     if (data) {
       setPengaturan(data as PengaturanClub)
       setForm({
-        persentase_pool_honor: data.persentase_pool_honor ?? 40,
+        persentase_pool_honor: data.persentase_pool_honor ?? 45,
+        pct_coach_pool: data.pct_coach_pool ?? 0.45,
+        pct_operational: data.pct_operational ?? 0.18,
+        pct_reserve: data.pct_reserve ?? 0.17,
+        pct_development: data.pct_development ?? 0.12,
+        pct_founder_margin: data.pct_founder_margin ?? 0.08,
         nama_club: data.nama_club ?? '',
         alamat_dojo: data.alamat_dojo ?? '',
         kontak_wa: data.kontak_wa ?? '',
@@ -64,18 +74,32 @@ export default function AdminPengaturanPage() {
 
   const handleSave = async () => {
     if (!pengaturan) return
-    const pool = Number(form.persentase_pool_honor)
-    if (isNaN(pool) || pool < 0 || pool > 100) {
-      setError('Persentase pool honor harus antara 0 dan 100.')
+    
+    const coachPool = Number(form.pct_coach_pool) || 0
+    const operational = Number(form.pct_operational) || 0
+    const reserve = Number(form.pct_reserve) || 0
+    const development = Number(form.pct_development) || 0
+    const founder = Number(form.pct_founder_margin) || 0
+
+    // Validasi total = 100% (atau 1.0)
+    const total = Number((coachPool + operational + reserve + development + founder).toFixed(4))
+    if (total !== 1) {
+      setError(`Total persentase alokasi keuangan harus 100%. Saat ini: ${(total * 100).toFixed(1)}%`)
       return
     }
+
     setSaving(true)
     setError(null)
     setSuccess(false)
 
     const payload = {
       ...form,
-      persentase_pool_honor: pool,
+      persentase_pool_honor: Math.round(coachPool * 100),
+      pct_coach_pool: coachPool,
+      pct_operational: operational,
+      pct_reserve: reserve,
+      pct_development: development,
+      pct_founder_margin: founder,
       iuran_default: Number(form.iuran_default) || 0,
       nama_club: form.nama_club || null,
       alamat_dojo: form.alamat_dojo || null,
@@ -109,11 +133,19 @@ export default function AdminPengaturanPage() {
     setSuccess(false)
   }
 
+  const fPercent = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value) / 100
+    setForm(prev => ({ ...prev, [field]: val }))
+    setSuccess(false)
+  }
+
   if (loading) return (
     <div className="max-w-3xl mx-auto">
       <Card className="text-center py-16 text-dark/50 font-sans">Memuat pengaturan...</Card>
     </div>
   )
+
+  const pctTotal = (Number(form.pct_coach_pool || 0) + Number(form.pct_operational || 0) + Number(form.pct_reserve || 0) + Number(form.pct_development || 0) + Number(form.pct_founder_margin || 0)) * 100
 
   return (
     <div className="max-w-3xl mx-auto flex flex-col gap-8 pb-10">
@@ -127,8 +159,8 @@ export default function AdminPengaturanPage() {
         </Button>
       </div>
 
-      {error && <div className="bg-red-100 border-2 border-red-400 rounded-xl p-4 text-red-700 font-bold text-sm">⚠️ {error}</div>}
-      {success && <div className="bg-green-100 border-2 border-green-400 rounded-xl p-4 text-green-700 font-bold text-sm">✅ Pengaturan berhasil disimpan!</div>}
+      {error && <div className="bg-accent/20 border-2 border-accent rounded-xl p-4 text-dark font-bold text-sm">⚠️ {error}</div>}
+      {success && <div className="bg-primary/20 border-2 border-primary rounded-xl p-4 text-dark font-bold text-sm">✅ Pengaturan berhasil disimpan!</div>}
 
       {/* === IDENTITAS CLUB === */}
       <Card className="flex flex-col gap-5 border-2 border-dark">
@@ -152,6 +184,50 @@ export default function AdminPengaturanPage() {
           </div>
           <Input label="Kontak WhatsApp" value={form.kontak_wa ?? ''} onChange={f('kontak_wa')} placeholder="08123456789" />
           <Input label="Email Club" type="email" value={form.kontak_email ?? ''} onChange={f('kontak_email')} placeholder="info@sigertaekwondo.id" />
+        </div>
+      </Card>
+
+      {/* === ALOKASI BUCKET KEUANGAN === */}
+      <Card className="flex flex-col gap-5 border-2 border-dark">
+        <div className="border-b-2 border-dark/10 pb-3">
+          <h2 className="text-lg font-bold font-sans text-dark">💰 Alokasi Bucket Finansial</h2>
+          <p className="text-xs text-dark/50 mt-0.5">Membagi 100% total pemasukan iuran terbayar ke dalam 5 pos anggaran</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Coach Pool / Honor (%)" type="number" step="1" min="0" max="100" value={String(Math.round(Number(form.pct_coach_pool) * 100))} onChange={fPercent('pct_coach_pool')} />
+          <Input label="Operasional (%)" type="number" step="1" min="0" max="100" value={String(Math.round(Number(form.pct_operational) * 100))} onChange={fPercent('pct_operational')} />
+          <Input label="Dana Cadangan (%)" type="number" step="1" min="0" max="100" value={String(Math.round(Number(form.pct_reserve) * 100))} onChange={fPercent('pct_reserve')} />
+          <Input label="Pengembangan Klub (%)" type="number" step="1" min="0" max="100" value={String(Math.round(Number(form.pct_development) * 100))} onChange={fPercent('pct_development')} />
+          <Input label="Margin Founder (%)" type="number" step="1" min="0" max="100" value={String(Math.round(Number(form.pct_founder_margin) * 100))} onChange={fPercent('pct_founder_margin')} />
+          
+          <div className="sm:col-span-2 flex items-center justify-between p-4 bg-background border-2 border-dark rounded-2xl">
+            <span className="font-bold text-dark">Total Persentase:</span>
+            <span className={`text-2xl font-bold font-mono ${Math.round(pctTotal) === 100 ? 'text-primary' : 'text-accent'}`}>
+              {Math.round(pctTotal)}% / 100%
+            </span>
+          </div>
+        </div>
+
+        {/* Simulasi Angka Kas */}
+        <div className="bg-dark text-white rounded-2xl border-2 border-dark p-5 flex flex-col gap-2">
+          <div className="text-sm font-bold border-b border-white/20 pb-2">Simulasi Alokasi Finansial (Contoh Total Iuran Rp 5.000.000)</div>
+          <div className="grid grid-cols-2 gap-y-2 text-sm font-sans mt-1">
+            <span className="text-white/60">1. Coach Pool (Honor)</span>
+            <span className="text-right font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(5000000 * Number(form.pct_coach_pool || 0))}</span>
+            
+            <span className="text-white/60">2. Dana Operasional</span>
+            <span className="text-right font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(5000000 * Number(form.pct_operational || 0))}</span>
+            
+            <span className="text-white/60">3. Dana Cadangan</span>
+            <span className="text-right font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(5000000 * Number(form.pct_reserve || 0))}</span>
+            
+            <span className="text-white/60">4. Pengembangan Klub</span>
+            <span className="text-right font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(5000000 * Number(form.pct_development || 0))}</span>
+            
+            <span className="text-white/60">5. Margin Founder</span>
+            <span className="text-right font-bold">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(5000000 * Number(form.pct_founder_margin || 0))}</span>
+          </div>
         </div>
       </Card>
 
@@ -237,45 +313,6 @@ export default function AdminPengaturanPage() {
           value={String(form.iuran_default ?? '')}
           onChange={f('iuran_default')}
           placeholder="200000"
-        />
-      </Card>
-
-      {/* === HONOR PELATIH === */}
-      <Card className="flex flex-col gap-5 border-2 border-dark">
-        <div className="border-b-2 border-dark/10 pb-3">
-          <h2 className="text-lg font-bold font-sans text-dark">👨‍🏫 Honor Pelatih</h2>
-          <p className="text-xs text-dark/50 mt-0.5">Persentase dari total iuran bulanan yang dialokasikan sebagai pool honor semua pelatih</p>
-        </div>
-
-        {/* Visual Calculator */}
-        <div className="bg-background rounded-2xl border-2 border-dark p-4 flex flex-col gap-3">
-          <div className="flex justify-between items-center">
-            <span className="font-bold font-sans text-dark text-sm">Simulasi (Iuran Rp 5.000.000)</span>
-            <span className="text-sm text-dark/50 font-sans">{form.persentase_pool_honor ?? 0}%</span>
-          </div>
-          <div className="h-3 bg-dark/10 rounded-full overflow-hidden border border-dark/10">
-            <div
-              className="h-full bg-primary rounded-full transition-all"
-              style={{ width: `${Math.min(Number(form.persentase_pool_honor) || 0, 100)}%` }}
-            />
-          </div>
-          <div className="flex justify-between text-sm font-sans">
-            <span className="text-dark/60">Pool Honor Pelatih</span>
-            <span className="font-bold text-dark">
-              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
-                .format(5000000 * (Number(form.persentase_pool_honor) || 0) / 100)}
-            </span>
-          </div>
-        </div>
-
-        <Input
-          label="Persentase Pool Honor (%)"
-          type="number"
-          min="0"
-          max="100"
-          step="0.5"
-          value={String(form.persentase_pool_honor)}
-          onChange={f('persentase_pool_honor')}
         />
       </Card>
 

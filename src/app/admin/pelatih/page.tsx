@@ -2,14 +2,21 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-const supabase = createClient()
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import type { Pelatih } from '@/lib/types'
 
+const supabase = createClient()
+
 const SABUK_OPTIONS = ['Putih', 'Kuning', 'Kuning Strip', 'Hijau', 'Hijau Strip', 'Biru', 'Biru Strip', 'Merah', 'Merah Strip 1', 'Merah Strip 2', 'Hitam']
+
+const ROLE_OPTIONS = [
+  { value: 'head_coach', label: 'Kepala Pelatih (Head Coach)' },
+  { value: 'core_coach', label: 'Pelatih Inti (Core Coach)' },
+  { value: 'assistant_coach', label: 'Asisten Pelatih (Assistant Coach)' }
+]
 
 export default function PelatihAdminPage() {
   const [pelatihList, setPelatihList] = useState<Pelatih[]>([])
@@ -24,7 +31,9 @@ export default function PelatihAdminPage() {
     no_hp: '',
     tgl_gabung: new Date().toISOString().split('T')[0],
     rate_honor_per_sesi: '50000',
-    status_aktif: true
+    status_aktif: true,
+    role: 'core_coach' as 'head_coach' | 'core_coach' | 'assistant_coach',
+    is_founder: false
   })
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -39,7 +48,7 @@ export default function PelatihAdminPage() {
     
     if (data) setPelatihList(data as Pelatih[])
     setLoading(false)
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchPelatih()
@@ -53,7 +62,9 @@ export default function PelatihAdminPage() {
       no_hp: '',
       tgl_gabung: new Date().toISOString().split('T')[0],
       rate_honor_per_sesi: '50000',
-      status_aktif: true
+      status_aktif: true,
+      role: 'core_coach',
+      is_founder: false
     })
     setIsFormOpen(true)
     setFormError(null)
@@ -68,7 +79,9 @@ export default function PelatihAdminPage() {
       no_hp: pelatih.no_hp,
       tgl_gabung: pelatih.tgl_gabung,
       rate_honor_per_sesi: String(pelatih.rate_honor_per_sesi || 0),
-      status_aktif: pelatih.status_aktif
+      status_aktif: pelatih.status_aktif,
+      role: pelatih.role || 'core_coach',
+      is_founder: pelatih.is_founder || false
     })
     setIsFormOpen(true)
     setFormError(null)
@@ -87,10 +100,12 @@ export default function PelatihAdminPage() {
       no_hp: formData.no_hp,
       tgl_gabung: formData.tgl_gabung,
       rate_honor_per_sesi: Number(formData.rate_honor_per_sesi),
-      status_aktif: formData.status_aktif
+      status_aktif: formData.status_aktif,
+      role: formData.role,
+      is_founder: formData.is_founder
     }
 
-    let error;
+    let error
 
     if (editingId) {
       const { error: updateError } = await supabase
@@ -126,6 +141,10 @@ export default function PelatihAdminPage() {
     } else {
       await fetchPelatih()
     }
+  }
+
+  const getRoleLabel = (val: string) => {
+    return ROLE_OPTIONS.find(opt => opt.value === val)?.label || val
   }
 
   return (
@@ -165,11 +184,32 @@ export default function PelatihAdminPage() {
                 </select>
               </div>
 
+              <div className="flex flex-col gap-2">
+                <label className="font-bold text-dark font-sans text-sm">Jabatan (Role)</label>
+                <select 
+                  className="border-2 border-dark rounded-xl px-4 py-2.5 bg-white text-dark font-sans focus:ring-2 focus:ring-primary outline-none"
+                  value={formData.role}
+                  onChange={e => setFormData({...formData, role: e.target.value as any})}
+                >
+                  {ROLE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </div>
+
               <Input label="No HP" type="tel" value={formData.no_hp} onChange={e => setFormData({...formData, no_hp: e.target.value})} required />
               <Input label="Tanggal Gabung" type="date" value={formData.tgl_gabung} onChange={e => setFormData({...formData, tgl_gabung: e.target.value})} required />
-              <Input label="Rate Honor / Sesi (Rp)" type="number" value={formData.rate_honor_per_sesi} onChange={e => setFormData({...formData, rate_honor_per_sesi: e.target.value})} required />
+              <Input label="Rate Honor / Sesi (Rp) — Legacy" type="number" value={formData.rate_honor_per_sesi} onChange={e => setFormData({...formData, rate_honor_per_sesi: e.target.value})} required />
               
-              <div className="flex flex-col gap-2 justify-center mt-2">
+              <div className="flex flex-col gap-4 justify-center mt-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="w-5 h-5 border-2 border-dark rounded accent-primary"
+                    checked={formData.is_founder}
+                    onChange={e => setFormData({...formData, is_founder: e.target.checked})}
+                  />
+                  <span className="font-bold font-sans text-dark">Pendiri / Kepala Klub (Dapat Margin Founder)</span>
+                </label>
+                
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input 
                     type="checkbox" 
@@ -200,22 +240,28 @@ export default function PelatihAdminPage() {
             <thead className="bg-dark text-white">
               <tr>
                 <th className="p-4 font-bold">Nama</th>
+                <th className="p-4 font-bold">Jabatan</th>
                 <th className="p-4 font-bold">Sabuk</th>
                 <th className="p-4 font-bold">No HP</th>
-                <th className="p-4 font-bold">Tgl Gabung</th>
-                <th className="p-4 font-bold">Rate/Sesi</th>
+                <th className="p-4 font-bold text-center">Founder</th>
                 <th className="p-4 font-bold text-center">Status</th>
                 <th className="p-4 font-bold text-right">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {pelatihList.map((item, i) => (
+              {pelatihList.map((item) => (
                 <tr key={item.id} className="border-b border-dark/10 hover:bg-background transition-colors">
                   <td className="p-4 font-bold text-dark">{item.nama}</td>
+                  <td className="p-4 font-bold text-dark/70">{getRoleLabel(item.role)}</td>
                   <td className="p-4">{item.sabuk}</td>
                   <td className="p-4">{item.no_hp}</td>
-                  <td className="p-4">{new Date(item.tgl_gabung).toLocaleDateString('id-ID')}</td>
-                  <td className="p-4">Rp {Number(item.rate_honor_per_sesi).toLocaleString('id-ID')}</td>
+                  <td className="p-4 text-center">
+                    {item.is_founder ? (
+                      <span className="text-xl">⭐</span>
+                    ) : (
+                      <span className="text-dark/20">—</span>
+                    )}
+                  </td>
                   <td className="p-4 text-center">
                     {item.status_aktif ? (
                       <Badge color="primary">Aktif</Badge>
