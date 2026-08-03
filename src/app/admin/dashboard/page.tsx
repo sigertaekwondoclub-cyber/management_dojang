@@ -345,15 +345,15 @@ export default function AdminDashboardPage() {
           <h2 className="font-bold font-sans text-white/80 text-lg">Cashflow Bulan Ini</h2>
           <div className="grid grid-cols-3 gap-4 mt-2">
             <div>
-              <div className="text-xs text-white/50 font-sans mb-1">Income</div>
+              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">💵 Total Pemasukan</div>
               <div className="text-lg font-bold font-sans text-primary">{formatRupiah(stats.income)}</div>
             </div>
             <div>
-              <div className="text-xs text-white/50 font-sans mb-1">Expense</div>
+              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">💸 Total Pengeluaran</div>
               <div className="text-lg font-bold font-sans text-accent">{formatRupiah(stats.expense)}</div>
             </div>
             <div>
-              <div className="text-xs text-white/50 font-sans mb-1">Saldo Net</div>
+              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">🏦 Saldo Bersih</div>
               <div className={`text-lg font-bold font-sans ${saldo >= 0 ? 'text-white' : 'text-accent'}`}>{formatRupiah(saldo)}</div>
             </div>
           </div>

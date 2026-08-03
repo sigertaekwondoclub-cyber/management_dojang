@@ -183,28 +183,28 @@ export default function AdminHonorPage() {
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Total Income Iuran</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">💰 Total Income Iuran</div>
                 <div className="text-2xl font-bold font-sans mt-1 text-primary">{formatRupiah(payrollRun.total_income)}</div>
               </div>
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Coach Pool (Honor)</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">🏆 Coach Pool (Honor)</div>
                 <div className="text-2xl font-bold font-sans mt-1 text-[#BFDBFE]">{formatRupiah(payrollRun.coach_pool_amount)}</div>
               </div>
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Operasional</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">⚙️ Operasional</div>
                 <div className="text-2xl font-bold font-sans mt-1">{formatRupiah(payrollRun.operational_amount)}</div>
               </div>
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Dana Cadangan</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">🏦 Dana Cadangan</div>
                 <div className="text-2xl font-bold font-sans mt-1">{formatRupiah(payrollRun.reserve_amount)}</div>
               </div>
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Pengembangan Club</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">📈 Pengembangan Club</div>
                 <div className="text-2xl font-bold font-sans mt-1">{formatRupiah(payrollRun.development_amount)}</div>
               </div>
-              <div className="p-4 bg-white/10 rounded-2xl border border-white/10">
-                <div className="text-xs text-white/50 uppercase font-bold tracking-wider">Founder Margin</div>
+              <div className="p-4 bg-white/10 rounded-2xl border border-white/20">
+                <div className="text-xs text-white/80 uppercase font-bold tracking-wider mb-1">👑 Founder Margin</div>
                 <div className="text-2xl font-bold font-sans mt-1">{formatRupiah(payrollRun.founder_margin_amount)}</div>
               </div>
             </div>
