@@ -624,12 +624,21 @@ export default function AdminKeuanganPage() {
                     <h3 className="font-bold text-dark font-sans">
                       📅 {BULAN_FULL[parseInt(tMon)]} {tYear}
                     </h3>
-                    <div className="flex gap-4 text-sm font-sans">
-                      <span className="text-green-700 font-bold">+{formatRupiah(bulanIncome)}</span>
-                      <span className="text-red-600 font-bold">-{formatRupiah(bulanExpense)}</span>
-                      <span className={`font-bold ${(bulanIncome - bulanExpense) >= 0 ? 'text-dark' : 'text-red-700'}`}>
-                        Saldo: {formatRupiah(bulanIncome - bulanExpense)}
-                      </span>
+                    <div className="flex flex-wrap gap-3 text-sm font-sans items-center">
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-dark/40 font-bold">💵 Income</span>
+                        <span className="text-green-700 font-bold">{formatRupiah(bulanIncome)}</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-dark/40 font-bold">💸 Expense</span>
+                        <span className="text-red-600 font-bold">{formatRupiah(bulanExpense)}</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] uppercase tracking-wider text-dark/40 font-bold">🏦 Saldo</span>
+                        <span className={`font-bold ${(bulanIncome - bulanExpense) >= 0 ? 'text-dark' : 'text-red-700'}`}>
+                          {formatRupiah(bulanIncome - bulanExpense)}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <TransaksiTable
