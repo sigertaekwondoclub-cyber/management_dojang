@@ -48,8 +48,8 @@ export default function AdminKartuPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const generateNoKartu = (existingCount: number) => {
-    const num = String(existingCount + 1).padStart(4, '0')
+  const generateNoKartu = (baseNumber: number) => {
+    const num = String(baseNumber).padStart(4, '0')
     return `TKD-${num}`
   }
 
@@ -60,9 +60,23 @@ export default function AdminKartuPage() {
     setGenerating(true)
     setError(null)
 
-    const currentTotal = kartuList.length
+    // Ambil nomor kartu tertinggi dari database untuk menghindari duplikat
+    const { data: maxData } = await supabase
+      .from('kartu_anggota')
+      .select('no_kartu')
+      .like('no_kartu', 'TKD-%')
+      .order('no_kartu', { ascending: false })
+      .limit(1)
+
+    let maxNumber = 0
+    if (maxData && maxData.length > 0) {
+      const lastNo = maxData[0].no_kartu // e.g. "TKD-0005"
+      const parsed = parseInt(lastNo.replace('TKD-', ''), 10)
+      if (!isNaN(parsed)) maxNumber = parsed
+    }
+
     const rows = toGenerate.map((s, idx) => {
-      const noKartu = generateNoKartu(currentTotal + idx)
+      const noKartu = generateNoKartu(maxNumber + idx + 1)
       return {
         siswa_id: s.id,
         no_kartu: noKartu,
