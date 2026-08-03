@@ -78,6 +78,7 @@ export default function OrtuLayout({ children }: { children: React.ReactNode }) 
     { label: '🪪 Kartu Anggota', path: '/ortu/kartu' },
     { label: '🛒 Toko Merchant', path: '/ortu/merchant' },
     { label: '📦 Pesanan Saya', path: '/ortu/merchant/pesanan' },
+    { label: '📄 Laporan Saya', path: '/ortu/laporan' },
   ]
 
   // Main items for the bottom navigation bar on mobile

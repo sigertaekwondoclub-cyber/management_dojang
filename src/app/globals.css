@@ -65,3 +65,10 @@
     scrollbar-color: #1E2A38 #FDF6EC;
   }
 }
+
+/* ===== PRINT / PDF STYLES ===== */
+@media print {
+  body::after { display: none !important; }
+  body { background: white !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}

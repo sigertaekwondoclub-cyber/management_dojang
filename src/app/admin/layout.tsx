@@ -81,6 +81,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: '🛒 Toko Merchant', path: '/admin/merchant' },
     { label: '📦 Pesanan Merchant', path: '/admin/merchant/pesanan' },
     { label: '🌟 Rekap Prestasi', path: '/admin/prestasi' },
+    { label: '📄 Laporan & Rekap', path: '/admin/laporan' },
     { label: '⚙️ Pengaturan', path: '/admin/pengaturan' },
     { label: '🔑 Kelola Akun', path: '/admin/akun' },
   ]
