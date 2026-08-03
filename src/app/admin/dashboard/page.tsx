@@ -343,18 +343,18 @@ export default function AdminDashboardPage() {
         {/* Cashflow Singkat */}
         <Card className="flex flex-col gap-4 bg-dark text-white border-dark">
           <h2 className="font-bold font-sans text-white/80 text-lg">Cashflow Bulan Ini</h2>
-          <div className="grid grid-cols-3 gap-4 mt-2">
-            <div>
-              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">💵 Total Pemasukan</div>
-              <div className="text-lg font-bold font-sans text-primary">{formatRupiah(stats.income)}</div>
+          <div className="grid grid-cols-3 gap-3 mt-2">
+            <div className="bg-white rounded-2xl p-3 flex flex-col gap-1">
+              <div className="text-[10px] font-bold text-dark/60 uppercase tracking-wide font-sans">💵 Pemasukan</div>
+              <div className="text-base font-bold font-sans text-green-700">{formatRupiah(stats.income)}</div>
             </div>
-            <div>
-              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">💸 Total Pengeluaran</div>
-              <div className="text-lg font-bold font-sans text-accent">{formatRupiah(stats.expense)}</div>
+            <div className="bg-white rounded-2xl p-3 flex flex-col gap-1">
+              <div className="text-[10px] font-bold text-dark/60 uppercase tracking-wide font-sans">💸 Pengeluaran</div>
+              <div className="text-base font-bold font-sans text-red-600">{formatRupiah(stats.expense)}</div>
             </div>
-            <div>
-              <div className="text-xs font-bold text-white/70 font-sans mb-1 uppercase tracking-wide">🏦 Saldo Bersih</div>
-              <div className={`text-lg font-bold font-sans ${saldo >= 0 ? 'text-white' : 'text-accent'}`}>{formatRupiah(saldo)}</div>
+            <div className="bg-white rounded-2xl p-3 flex flex-col gap-1">
+              <div className="text-[10px] font-bold text-dark/60 uppercase tracking-wide font-sans">🏦 Saldo Bersih</div>
+              <div className={`text-base font-bold font-sans ${saldo >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(saldo)}</div>
             </div>
           </div>
           <Link href="/admin/keuangan" className="text-xs text-white/50 hover:text-white mt-auto text-right font-sans transition-colors">Lihat detail laporan →</Link>
