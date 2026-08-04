@@ -17,11 +17,6 @@ export const metadata: Metadata = {
   description: 'Sistem Manajemen Klub Taekwondo Siger',
   manifest: '/manifest.json',
   themeColor: '#22C55E',
-  icons: {
-    icon: '/favicon.ico',
-    apple: '/icon-192x192.png',
-    shortcut: '/favicon.ico',
-  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
