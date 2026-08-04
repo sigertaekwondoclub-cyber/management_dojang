@@ -18,9 +18,9 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   themeColor: '#22C55E',
   icons: {
-    icon: '/logo-siger.png',
-    apple: '/logo-siger.png',
-    shortcut: '/logo-siger.png',
+    icon: '/favicon.ico',
+    apple: '/icon-192x192.png',
+    shortcut: '/favicon.ico',
   },
   appleWebApp: {
     capable: true,
