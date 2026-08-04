@@ -1,5 +1,5 @@
 import os
-from PIL import Image
+from PIL import Image, ImageDraw
 
 logo_path = "/media/lian/Ubuntu/Siger TC/siger-tkd-manager/public/logo-siger.png"
 public_dir = "/media/lian/Ubuntu/Siger TC/siger-tkd-manager/public"
@@ -60,13 +60,23 @@ if max_x < min_x or max_y < min_y:
 cropped = img.crop((min_x, min_y, max_x + 1, max_y + 1))
 print(f"Isolated logo size: {cropped.size}")
 
-# Pad to square
+# Create a square canvas
 max_dim = max(cropped.width, cropped.height)
-square_img = Image.new("RGBA", (max_dim, max_dim), (0, 0, 0, 0))
-paste_x = (max_dim - cropped.width) // 2
-paste_y = (max_dim - cropped.height) // 2
-square_img.paste(cropped, (paste_x, paste_y))
-print("Padded logo to square canvas")
+# Add some padding inside the circle so the logo doesn't touch the edges
+canvas_size = int(max_dim * 1.1)
+
+# Create white circular background
+circle_img = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+draw = ImageDraw.Draw(circle_img)
+# Draw white circle
+draw.ellipse([0, 0, canvas_size - 1, canvas_size - 1], fill=(255, 255, 255, 255))
+
+# Paste the cropped logo in the center of the white circle
+paste_x = (canvas_size - cropped.width) // 2
+paste_y = (canvas_size - cropped.height) // 2
+circle_img.paste(cropped, (paste_x, paste_y), mask=cropped)
+
+print("Created white circular backing for visibility on dark tabs")
 
 # Save outputs
 def save_icon(img_to_save, size, filename, directory, format_type):
@@ -76,13 +86,13 @@ def save_icon(img_to_save, size, filename, directory, format_type):
     print(f"Saved {path}")
 
 # Public outputs
-save_icon(square_img, 32, "favicon.ico", public_dir, "ICO")
-save_icon(square_img, 192, "icon-192x192.png", public_dir, "PNG")
-save_icon(square_img, 512, "icon-512x512.png", public_dir, "PNG")
+save_icon(circle_img, 32, "favicon.ico", public_dir, "ICO")
+save_icon(circle_img, 192, "icon-192x192.png", public_dir, "PNG")
+save_icon(circle_img, 512, "icon-512x512.png", public_dir, "PNG")
 
 # App outputs
-save_icon(square_img, 32, "favicon.ico", app_dir, "ICO")
-save_icon(square_img, 192, "icon.png", app_dir, "PNG")
-save_icon(square_img, 192, "apple-icon.png", app_dir, "PNG")
+save_icon(circle_img, 32, "favicon.ico", app_dir, "ICO")
+save_icon(circle_img, 192, "icon.png", app_dir, "PNG")
+save_icon(circle_img, 192, "apple-icon.png", app_dir, "PNG")
 
 print("All optimized assets updated successfully!")
