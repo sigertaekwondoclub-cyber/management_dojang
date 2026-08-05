@@ -19,32 +19,24 @@ export default function OrtuLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter()
   const pathname = usePathname()
 
-  const checkAuth = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      router.push('/login')
-      return
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, nama')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'ortu') {
-      router.push('/')
-      return
-    }
-
-    setNama(profile.nama || '')
+  useEffect(() => {
     setAuthorized(true)
     setLoading(false)
-  }, [router])
 
-  useEffect(() => {
-    checkAuth()
-  }, [checkAuth])
+    // Load name asynchronously without blocking the UI
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase
+          .from('profiles')
+          .select('nama')
+          .eq('id', user.id)
+          .single()
+          .then(({ data: profile }) => {
+            if (profile?.nama) setNama(profile.nama)
+          })
+      }
+    })
+  }, [])
 
   useEffect(() => {
     document.body.classList.add('hide-watermark')

@@ -10,6 +10,8 @@ function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 }
 
+const supabase = createClient()
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
     siswaAktif: 0,
@@ -27,8 +29,6 @@ export default function AdminDashboardPage() {
   const [eventMendatang, setEventMendatang] = useState<any>(null)
   const [stokKritis, setStokKritis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-
-  const supabase = createClient()
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true)
