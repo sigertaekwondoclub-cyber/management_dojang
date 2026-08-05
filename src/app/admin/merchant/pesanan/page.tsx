@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import type { PesananMerchant, StatusPesanan } from '@/lib/types'
+import { formatRupiah, formatTanggal as formatTgl } from '@/lib/utils'
 
 const supabase = createClient()
 
@@ -17,13 +18,6 @@ const STATUS_CONFIG: Record<StatusPesanan, { label: string; color: 'primary' | '
   siap_diambil:        { label: 'Siap Diambil',     color: 'primary' },
 }
 const STATUS_FLOW: StatusPesanan[] = ['menunggu_pembayaran', 'menunggu_verifikasi', 'lunas', 'diproses', 'siap_diambil']
-
-function formatRupiah(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
-}
-function formatTgl(s: string) {
-  return new Date(s).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
-}
 
 export default function AdminPesananMerchantPage() {
   const [pesananList, setPesananList] = useState<PesananMerchant[]>([])

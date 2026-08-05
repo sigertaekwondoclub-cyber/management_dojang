@@ -7,13 +7,10 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
 import type { ProdukMerchant, KategoriMerchant } from '@/lib/types'
+import { formatRupiah } from '@/lib/utils'
 
 const supabase = createClient()
 const KATEGORI_OPTIONS: KategoriMerchant[] = ['Seragam', 'Aksesoris', 'Perlengkapan']
-
-function formatRupiah(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
-}
 
 type VarianForm = { ukuran: string; stok: number }
 type ProdukForm = { nama: string; kategori: KategoriMerchant; harga: string; deskripsi: string; varian: VarianForm[] }

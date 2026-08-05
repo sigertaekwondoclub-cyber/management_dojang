@@ -9,14 +9,12 @@ import { Input } from '@/components/ui/Input'
 import type { PayrollRun, PayrollDetail } from '@/lib/types'
 import { generatePayroll, updateDetailStatusDibayar } from './actions'
 
+import { formatRupiah } from '@/lib/utils'
+
 const supabase = createClient()
 
 const BULAN_NAMES = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
-
-function formatRupiah(n: number) {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
-}
 
 type DetailWithPelatih = PayrollDetail & { 
   pelatih: { nama: string; role: 'head_coach' | 'core_coach' | 'assistant_coach'; is_founder: boolean } 
