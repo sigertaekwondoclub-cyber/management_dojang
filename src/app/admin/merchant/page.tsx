@@ -25,6 +25,7 @@ export default function AdminMerchantPage() {
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const fetchProduk = useCallback(async () => {
     setLoading(true)
@@ -60,8 +61,11 @@ export default function AdminMerchantPage() {
   }
 
   const toggleAktif = async (p: ProdukMerchant) => {
+    if (togglingId) return
+    setTogglingId(p.id)
     await supabase.from('produk_merchant').update({ status_aktif: !p.status_aktif }).eq('id', p.id)
-    fetchProduk()
+    await fetchProduk()
+    setTogglingId(null)
   }
 
   const hapusProduk = async (id: string) => {
@@ -108,11 +112,44 @@ export default function AdminMerchantPage() {
         const { error: err } = await supabase.from('produk_merchant').update(payload).eq('id', editId)
         if (err) throw err
         
-        const { error: delErr } = await supabase.from('produk_varian').delete().eq('produk_id', editId)
-        if (delErr) throw delErr
-        
-        const { error: insErr } = await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: editId, ukuran: v.ukuran, stok: v.stok })))
-        if (insErr) throw insErr
+        // Fetch existing varians from database to perform selective upsert/delete
+        const { data: dbVarians, error: fetchVarianErr } = await supabase
+          .from('produk_varian')
+          .select('id, ukuran')
+          .eq('produk_id', editId)
+        if (fetchVarianErr) throw fetchVarianErr
+
+        const dbVarianMap = new Map((dbVarians || []).map(v => [v.ukuran, v.id]))
+        const formUkuranSet = new Set(form.varian.map(v => v.ukuran))
+
+        // Identify variants to delete
+        const toDeleteIds = (dbVarians || [])
+          .filter(v => !formUkuranSet.has(v.ukuran))
+          .map(v => v.id)
+
+        if (toDeleteIds.length > 0) {
+          const { error: delErr } = await supabase
+            .from('produk_varian')
+            .delete()
+            .in('id', toDeleteIds)
+          if (delErr) throw delErr
+        }
+
+        // Prepare variants to upsert
+        const toUpsert = form.varian.map(v => {
+          const existingId = dbVarianMap.get(v.ukuran)
+          return {
+            ...(existingId ? { id: existingId } : {}),
+            produk_id: editId,
+            ukuran: v.ukuran,
+            stok: v.stok
+          }
+        })
+
+        const { error: upsertErr } = await supabase
+          .from('produk_varian')
+          .upsert(toUpsert)
+        if (upsertErr) throw upsertErr
       } else {
         const { data: p, error: err } = await supabase.from('produk_merchant')
           .insert({
@@ -183,7 +220,9 @@ export default function AdminMerchantPage() {
               </div>
               <div className="flex gap-2 shrink-0 flex-wrap">
                 <Button variant="secondary" onClick={() => openEdit(p)}>Edit</Button>
-                <Button variant="accent" onClick={() => toggleAktif(p)}>{p.status_aktif ? 'Nonaktifkan' : 'Aktifkan'}</Button>
+                <Button variant="accent" onClick={() => toggleAktif(p)} disabled={togglingId === p.id}>
+                  {togglingId === p.id ? 'Memproses...' : p.status_aktif ? 'Nonaktifkan' : 'Aktifkan'}
+                </Button>
                 <Button variant="secondary" onClick={() => hapusProduk(p.id)} className="bg-red-500 hover:bg-red-600 text-white">Hapus</Button>
               </div>
             </Card>
