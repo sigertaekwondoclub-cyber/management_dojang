@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/client'
 
 // Define shared types for Supabase query results
 export interface Profile {
@@ -298,5 +297,3 @@ export interface KeranjangItem {
   varian: ProdukVarian
   qty: number
 }
-
-export { createClient }

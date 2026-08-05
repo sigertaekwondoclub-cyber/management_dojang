@@ -10,7 +10,7 @@
   body {
     position: relative;
     background-color: #FDF6EC;
-    min-h-screen: 100vh;
+    min-height: 100vh;
   }
   
   /* Membuat logo berada di dalam lingkaran putih bersih dengan shadow brutal */
