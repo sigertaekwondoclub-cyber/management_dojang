@@ -64,28 +64,28 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-background">
-      <Card className="w-full max-w-md p-8 flex flex-col gap-6 items-center">
+      <Card className="w-full max-w-md p-8 flex flex-col gap-6 items-center animate-scale-in">
         <div className="text-center flex flex-col items-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden">
+          <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden animate-bounce-in">
             <img 
               src="/logo-siger.png" 
               alt="Logo Siger Taekwondo Club" 
               className="w-full h-full object-cover" 
             />
           </div>
-          <div>
+          <div className="animate-fade-in-up stagger-2">
             <h1 className="text-3xl font-bold font-sans text-dark">Siger TKD Manager</h1>
             <p className="text-dark/80 mt-2 font-sans">Masuk ke akun Anda</p>
           </div>
         </div>
 
         {error && (
-          <div className="bg-accent/20 border-2 border-accent text-dark p-3 rounded-xl font-sans text-sm">
+          <div className="bg-accent/20 border-2 border-accent text-dark p-3 rounded-xl font-sans text-sm animate-wiggle">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        <form onSubmit={handleLogin} className="flex flex-col gap-4 animate-fade-in-up stagger-3">
           <Input 
             label="Email" 
             type="email" 

@@ -123,15 +123,15 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-10">
-      <div>
+      <div className="animate-fade-in">
         <h1 className="text-3xl font-bold font-sans text-dark">🏠 Dashboard Admin</h1>
         <p className="text-dark/60 font-sans mt-1">Ringkasan aktivitas Siger Taekwondo Club</p>
       </div>
 
       {/* Banner Milestone Growth Pelatih */}
       {stats.siswaAktif >= 30 && (
-        <div className="bg-[#BFDBFE] border-4 border-dark p-5 rounded-2xl shadow-brutal flex items-center gap-4">
-          <div className="text-3xl">🚀</div>
+        <div className="bg-[#BFDBFE] border-4 border-dark p-5 rounded-2xl shadow-brutal flex items-center gap-4 animate-fade-in-up">
+          <div className="text-3xl animate-bounce-gentle">🚀</div>
           <div>
             <h4 className="font-bold text-dark font-sans text-lg">Milestone Pertumbuhan Klub!</h4>
             <p className="text-dark/80 text-sm font-sans mt-0.5">
@@ -147,77 +147,77 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Grid Metrik Utama */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 stagger-children">
         {/* Siswa */}
-        <Card className="p-6 border-2 border-dark bg-[#BBF7D0] hover:-translate-y-1 transition-transform">
+        <Card className="p-6 border-2 border-dark bg-[#BBF7D0] hover:-translate-y-1 transition-transform animate-fade-in-up">
           <div className="flex justify-between items-start">
             <div>
               <div className="text-sm font-sans font-bold text-dark/60">Siswa Aktif</div>
-              <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.siswaAktif}</div>
+              <div className="text-4xl font-bold font-sans text-dark mt-1 animate-number-count">{stats.siswaAktif}</div>
             </div>
-            <div className="text-4xl opacity-80">🥋</div>
+            <div className="text-4xl opacity-80 animate-float">🥋</div>
           </div>
         </Card>
         
         {/* Pelatih */}
-        <Card className="p-6 border-2 border-dark bg-[#BFDBFE] hover:-translate-y-1 transition-transform">
+        <Card className="p-6 border-2 border-dark bg-[#BFDBFE] hover:-translate-y-1 transition-transform animate-fade-in-up">
           <div className="flex justify-between items-start">
             <div>
               <div className="text-sm font-sans font-bold text-dark/60">Pelatih Aktif</div>
-              <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.pelatihAktif}</div>
+              <div className="text-4xl font-bold font-sans text-dark mt-1 animate-number-count">{stats.pelatihAktif}</div>
             </div>
-            <div className="text-4xl opacity-80">👨‍🏫</div>
+            <div className="text-4xl opacity-80 animate-float">👨‍🏫</div>
           </div>
         </Card>
 
         {/* Pendaftaran Siswa */}
         <Link href="/admin/pendaftaran" className="block outline-none">
-          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.daftarBaru > 0 ? 'bg-[#FDE68A]' : 'bg-white'}`}>
+          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full animate-fade-in-up ${stats.daftarBaru > 0 ? 'bg-[#FDE68A]' : 'bg-white'}`}>
             <div className="flex justify-between items-start">
               <div>
                 <div className="text-sm font-sans font-bold text-dark/60">Daftar Baru</div>
-                <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.daftarBaru}</div>
+                <div className="text-4xl font-bold font-sans text-dark mt-1 animate-number-count">{stats.daftarBaru}</div>
               </div>
-              <div className="text-4xl opacity-80">📝</div>
+              <div className={`text-4xl opacity-80 ${stats.daftarBaru > 0 ? 'animate-bounce-gentle' : ''}`}>📝</div>
             </div>
-            {stats.daftarBaru > 0 && <div className="text-xs font-bold text-dark mt-3">Menunggu verifikasi →</div>}
+            {stats.daftarBaru > 0 && <div className="text-xs font-bold text-dark mt-3 animate-pulse-soft">Menunggu verifikasi →</div>}
           </Card>
         </Link>
 
         {/* Verifikasi Iuran */}
         <Link href="/admin/iuran" className="block outline-none">
-          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.tagihanMenunggu > 0 ? 'bg-[#FECACA]' : 'bg-white'}`}>
+          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full animate-fade-in-up ${stats.tagihanMenunggu > 0 ? 'bg-[#FECACA]' : 'bg-white'}`}>
             <div className="flex justify-between items-start">
               <div>
                 <div className="text-sm font-sans font-bold text-dark/60">Verifikasi Iuran</div>
-                <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.tagihanMenunggu}</div>
+                <div className="text-4xl font-bold font-sans text-dark mt-1 animate-number-count">{stats.tagihanMenunggu}</div>
               </div>
-              <div className="text-4xl opacity-80">💰</div>
+              <div className={`text-4xl opacity-80 ${stats.tagihanMenunggu > 0 ? 'animate-bounce-gentle' : ''}`}>💰</div>
             </div>
-            {stats.tagihanMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3">Butuh pengecekan →</div>}
+            {stats.tagihanMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3 animate-pulse-soft">Butuh pengecekan →</div>}
           </Card>
         </Link>
 
         {/* Verifikasi Pesanan Merchant */}
         <Link href="/admin/merchant/pesanan" className="block outline-none">
-          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full ${stats.pesananMerchantMenunggu > 0 ? 'bg-accent' : 'bg-white'}`}>
+          <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform h-full animate-fade-in-up ${stats.pesananMerchantMenunggu > 0 ? 'bg-accent' : 'bg-white'}`}>
             <div className="flex justify-between items-start">
               <div>
                 <div className="text-sm font-sans font-bold text-dark/60">Pesanan Baru</div>
-                <div className="text-4xl font-bold font-sans text-dark mt-1">{stats.pesananMerchantMenunggu}</div>
+                <div className="text-4xl font-bold font-sans text-dark mt-1 animate-number-count">{stats.pesananMerchantMenunggu}</div>
               </div>
-              <div className="text-4xl opacity-80">🛒</div>
+              <div className={`text-4xl opacity-80 ${stats.pesananMerchantMenunggu > 0 ? 'animate-bounce-gentle' : ''}`}>🛒</div>
             </div>
-            {stats.pesananMerchantMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3">Perlu diproses →</div>}
+            {stats.pesananMerchantMenunggu > 0 && <div className="text-xs font-bold text-dark mt-3 animate-pulse-soft">Perlu diproses →</div>}
           </Card>
         </Link>
       </div>
 
       {/* Grid Grafik & Visualisasi */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-children">
         
         {/* BAR CHART: Cashflow Bulanan (Income vs Merchant vs Expense) */}
-        <Card className="flex flex-col gap-4 border-2 border-dark p-6">
+        <Card className="flex flex-col gap-4 border-2 border-dark p-6 animate-fade-in-up">
           <div>
             <h2 className="font-bold font-sans text-dark text-lg">Statistik Cashflow Bulan Ini</h2>
             <p className="text-xs text-dark/60">Perbandingan data kas masuk & keluar</p>
@@ -264,7 +264,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* DONUT CHART: Distribusi Pemasukan */}
-        <Card className="flex flex-col gap-4 border-2 border-dark p-6">
+        <Card className="flex flex-col gap-4 border-2 border-dark p-6 animate-fade-in-up">
           <div>
             <h2 className="font-bold font-sans text-dark text-lg">Distribusi Pemasukan</h2>
             <p className="text-xs text-dark/60">Persentase Iuran vs Toko Merchant</p>
@@ -320,7 +320,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Iuran Progress */}
-        <Card className="flex flex-col gap-4">
+        <Card className="flex flex-col gap-4 animate-fade-in-up">
           <h2 className="font-bold font-sans text-dark text-lg">Pemasukan Iuran Bulan Ini</h2>
           <div className="flex justify-between items-end">
             <div>
@@ -331,14 +331,14 @@ export default function AdminDashboardPage() {
           </div>
           <div className="h-4 bg-dark/10 rounded-full overflow-hidden border border-dark/20 mt-2">
             <div 
-              className="h-full bg-primary transition-all duration-1000" 
+              className="h-full bg-primary transition-all duration-1000 animate-progress-fill" 
               style={{ width: `${Math.min(iuranProgress, 100)}%` }}
             />
           </div>
         </Card>
 
         {/* Cashflow Singkat */}
-        <Card className="flex flex-col gap-4 bg-dark text-white border-dark">
+        <Card className="flex flex-col gap-4 bg-dark text-white border-dark animate-fade-in-up">
           <h2 className="font-bold font-sans text-white/80 text-lg">Cashflow Bulan Ini</h2>
           <div className="grid grid-cols-3 gap-3 mt-2">
             <div className="bg-white rounded-2xl p-3 flex flex-col gap-1">
@@ -358,7 +358,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Jadwal Terdekat */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 animate-fade-in-up">
           <h2 className="font-bold font-sans text-dark text-lg mb-4">📅 Jadwal Terdekat</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border-2 border-dark bg-background flex flex-col gap-1">
@@ -395,9 +395,9 @@ export default function AdminDashboardPage() {
 
       {/* ALERT STOK KRITIS */}
       {stokKritis.length > 0 && (
-        <Card className="border-4 border-dark bg-accent shadow-brutal p-6">
+        <Card className="border-4 border-dark bg-accent shadow-brutal p-6 animate-fade-in-up">
           <div className="flex items-center gap-3 mb-3">
-            <span className="text-2xl">⚠️</span>
+            <span className="text-2xl animate-wiggle">⚠️</span>
             <h3 className="font-bold text-dark text-lg">Peringatan: Stok Produk Hampir Habis!</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">

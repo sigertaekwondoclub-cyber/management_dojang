@@ -10,23 +10,23 @@ export default function Home() {
         
         {/* Hero Section */}
         <div className="text-center flex flex-col items-center gap-6">
-          <Badge color="secondary" className="mb-2 text-dark font-sans text-sm">Versi Beta 1.0</Badge>
+          <Badge color="secondary" className="mb-2 text-dark font-sans text-sm animate-fade-in-down">Versi Beta 1.0</Badge>
           {/* Logo Siger TC dalam lingkaran */}
-          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden animate-fade-in">
+          <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden animate-bounce-in">
             <img 
               src="/logo-siger.png" 
               alt="Logo Siger Taekwondo Club" 
               className="w-full h-full object-cover" 
             />
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-dark drop-shadow-sm mt-2">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-dark drop-shadow-sm mt-2 animate-fade-in-up stagger-2">
             Siger Taekwondo Club
           </h1>
-          <p className="text-lg md:text-xl font-sans max-w-2xl text-dark/80">
+          <p className="text-lg md:text-xl font-sans max-w-2xl text-dark/80 animate-fade-in-up stagger-3">
             Aplikasi manajemen keanggotaan, jadwal latihan, dan perkembangan atlet untuk Siger Taekwondo Club.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 mt-8">
+          <div className="flex flex-col sm:flex-row gap-4 mt-8 animate-fade-in-up stagger-4">
             <Link href="/login">
               <Button variant="primary" className="text-lg px-8 w-full sm:w-auto">
                 Masuk
@@ -41,8 +41,8 @@ export default function Home() {
         </div>
 
         {/* Feature Cards Preview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full mt-12">
-          <Card className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full mt-12 stagger-children">
+          <Card className="flex flex-col gap-4 animate-fade-in-up hover:-translate-y-1 transition-transform duration-200">
             <div className="h-12 w-12 rounded-full bg-primary border-2 border-dark shadow-brutal flex items-center justify-center font-bold text-xl">
               1
             </div>
@@ -50,7 +50,7 @@ export default function Home() {
             <p className="font-sans text-dark/80">Pantau data atlet, sabuk, dan prestasi dengan mudah.</p>
           </Card>
           
-          <Card className="flex flex-col gap-4">
+          <Card className="flex flex-col gap-4 animate-fade-in-up hover:-translate-y-1 transition-transform duration-200">
             <div className="h-12 w-12 rounded-full bg-secondary border-2 border-dark shadow-brutal flex items-center justify-center font-bold text-xl">
               2
             </div>
@@ -58,7 +58,7 @@ export default function Home() {
             <p className="font-sans text-dark/80">Atur jadwal latihan dan absensi untuk tiap dojang.</p>
           </Card>
           
-          <Card className="flex flex-col gap-4">
+          <Card className="flex flex-col gap-4 animate-fade-in-up hover:-translate-y-1 transition-transform duration-200">
             <div className="h-12 w-12 rounded-full bg-accent border-2 border-dark shadow-brutal flex items-center justify-center font-bold text-xl">
               3
             </div>

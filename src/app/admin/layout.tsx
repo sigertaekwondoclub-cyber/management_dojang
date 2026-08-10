@@ -37,9 +37,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (loading || !authorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background font-sans">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-dark border-t-primary rounded-full animate-spin" />
-          <span className="font-bold text-dark/60">Memuat Dashboard Admin...</span>
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <div className="w-12 h-12 border-4 border-dark/20 border-t-primary rounded-full animate-spin" />
+          <span className="font-bold text-dark/60 animate-pulse-soft">Memuat Dashboard Admin...</span>
         </div>
       </div>
     )
@@ -151,26 +151,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <>
           {/* Backdrop */}
           <div 
-            className="md:hidden fixed inset-0 bg-dark/40 z-40" 
+            className="md:hidden fixed inset-0 bg-dark/40 z-40 drawer-backdrop" 
             onClick={() => setIsDrawerOpen(false)} 
           />
           {/* Sheet Panel */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-4 border-dark rounded-t-3xl z-50 p-6 max-h-[75vh] overflow-y-auto flex flex-col gap-4 shadow-[0_-8px_30px_rgb(0,0,0,0.12)]">
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-4 border-dark rounded-t-3xl z-50 p-6 max-h-[75vh] overflow-y-auto flex flex-col gap-4 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] drawer-sheet">
             <div className="flex justify-between items-center pb-2 border-b border-dark/10">
               <h3 className="font-bold text-lg font-sans text-dark">Menu Lainnya</h3>
               <button 
                 onClick={() => setIsDrawerOpen(false)}
-                className="w-8 h-8 rounded-full border border-dark flex items-center justify-center font-bold text-dark hover:bg-background"
+                className="w-8 h-8 rounded-full border border-dark flex items-center justify-center font-bold text-dark hover:bg-background transition-colors"
               >
                 ✕
               </button>
             </div>
-            <nav className="grid grid-cols-2 gap-2 my-2">
+            <nav className="grid grid-cols-2 gap-2 my-2 stagger-children">
               {mobileOtherItems.map((item) => {
                 const isActive = pathname === item.path || pathname.startsWith(item.path)
                 return (
                   <Link key={item.path} href={item.path} onClick={() => setIsDrawerOpen(false)}>
-                    <div className={`px-3 py-2 rounded-xl border-2 font-bold font-sans transition-all duration-150 cursor-pointer text-xs ${
+                    <div className={`px-3 py-2 rounded-xl border-2 font-bold font-sans transition-all duration-150 cursor-pointer text-xs animate-fade-in-up ${
                       isActive
                       ? 'bg-primary border-dark shadow-brutal'
                       : 'bg-white border-dark/20 hover:border-dark hover:bg-background'
@@ -199,12 +199,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </main>
 
-      <style>{`
-        @keyframes pageEnter {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      {/* pageEnter keyframes are now in globals.css */}
     </div>
   )
 }
