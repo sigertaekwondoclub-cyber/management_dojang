@@ -11,6 +11,52 @@ export default function Home() {
         backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 4px)',
       }} />
 
+      {/* Background Grid & Dot Pattern */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.4]" style={{
+        backgroundImage: `
+          radial-gradient(rgba(30, 42, 56, 0.15) 1px, transparent 1px),
+          linear-gradient(rgba(30, 42, 56, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(30, 42, 56, 0.04) 1px, transparent 1px)
+        `,
+        backgroundSize: '24px 24px, 120px 120px, 120px 120px',
+      }} />
+
+      {/* Neubrutalist / RPG Accent Color Blobs (Matching Dojo Green, Sky Blue, Belt Red CTAs) */}
+      <div className="absolute top-[10%] left-[-5%] w-80 h-80 bg-primary/8 rounded-full blur-[80px] pointer-events-none z-0" />
+      <div className="absolute bottom-[10%] right-[-5%] w-[450px] h-[450px] bg-secondary/8 rounded-full blur-[110px] pointer-events-none z-0" />
+      <div className="absolute top-1/2 left-[10%] w-72 h-72 bg-accent/6 rounded-full blur-[90px] pointer-events-none z-0" />
+
+      {/* Dynamic Martial Arts themed Geometric & Speed Elements */}
+      {/* 1. Diagonal motion/speed lines */}
+      <div className="absolute top-16 right-[12%] opacity-[0.18] pointer-events-none hidden md:block animate-float" style={{ animationDelay: '0.8s' }}>
+        <svg width="140" height="140" viewBox="0 0 140 140" fill="none">
+          <line x1="20" y1="120" x2="120" y2="20" stroke="#1E2A38" strokeWidth="4" strokeDasharray="8 8" />
+          <line x1="40" y1="120" x2="120" y2="40" stroke="#1E2A38" strokeWidth="2" />
+          <line x1="20" y1="100" x2="100" y2="20" stroke="#1E2A38" strokeWidth="2" />
+        </svg>
+      </div>
+
+      {/* 2. Sporty Zigzag / Kicking Direction Chevron */}
+      <div className="absolute bottom-24 left-[8%] opacity-[0.22] pointer-events-none hidden md:block animate-float">
+        <svg width="110" height="110" viewBox="0 0 110 110" fill="none">
+          <path d="M15,35 L55,75 L95,35" stroke="#1E2A38" strokeWidth="6" strokeLinecap="square" strokeLinejoin="miter" />
+          <path d="M15,55 L55,95 L95,55" stroke="#1E2A38" strokeWidth="3" strokeLinecap="square" strokeLinejoin="miter" opacity="0.6" />
+        </svg>
+      </div>
+
+      {/* 3. Halftone style sporty crossbars */}
+      <div className="absolute top-1/3 left-[4%] opacity-[0.15] pointer-events-none hidden lg:block animate-float" style={{ animationDelay: '1.5s' }}>
+        <svg width="90" height="90" viewBox="0 0 90 90" fill="none">
+          <path d="M45,15 L45,75 M15,45 L75,45" stroke="#1E2A38" strokeWidth="4" />
+          <circle cx="45" cy="45" r="9" fill="#1E2A38" />
+        </svg>
+      </div>
+
+      {/* Fainted Watermark Shield Logo at Center (Secondary element) */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-[0.025] pointer-events-none z-0">
+        <img src="/logo-siger.png" alt="Watermark Logo" className="w-[320px] md:w-[450px] object-contain grayscale" />
+      </div>
+
       <div className="z-10 w-full max-w-4xl flex flex-col items-center gap-10">
 
         {/* === TITLE SCREEN HEADER === */}
