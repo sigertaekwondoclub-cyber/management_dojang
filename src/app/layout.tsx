@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Baloo_2, Inter } from "next/font/google";
+import { Baloo_2, Inter, Pixelify_Sans } from "next/font/google";
 import "./globals.css";
 
 const baloo2 = Baloo_2({
@@ -10,6 +10,11 @@ const baloo2 = Baloo_2({
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
+});
+
+const pixelify = Pixelify_Sans({
+  subsets: ["latin"],
+  variable: "--font-pixelify",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="id">
       <body
-        className={`${inter.variable} ${baloo2.variable} font-sans bg-background text-dark antialiased min-h-screen`}
+        className={`${inter.variable} ${baloo2.variable} ${pixelify.variable} font-sans bg-background text-dark antialiased min-h-screen`}
       >
         {children}
       </body>

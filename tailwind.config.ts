@@ -15,6 +15,9 @@ const config: Config = {
         accent: "#F4A5A5",
         dark: "#1E2A38",
       },
+      fontFamily: {
+        pixel: ["var(--font-pixelify)", "monospace"],
+      },
       boxShadow: {
         brutal: "4px 4px 0px #1E2A38",
       },

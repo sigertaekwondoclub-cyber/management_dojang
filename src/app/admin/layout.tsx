@@ -36,10 +36,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (loading || !authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background font-sans">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 animate-fade-in">
-          <div className="w-12 h-12 border-4 border-dark/20 border-t-primary rounded-full animate-spin" />
-          <span className="font-bold text-dark/60 animate-pulse-soft">Memuat Dashboard Admin...</span>
+          <div className="w-12 h-12 border-[4px] border-dark/20 border-t-primary animate-spin" />
+          <span className="font-pixel text-sm text-dark/60 animate-pulse-soft">Loading...</span>
         </div>
       </div>
     )
@@ -76,31 +76,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <NavigationProgress />
 
       {/* MOBILE HEADER */}
-      <header className="md:hidden flex items-center justify-between bg-white border-b-2 border-dark px-6 py-4 sticky top-0 z-30">
+      <header className="md:hidden flex items-center justify-between bg-white border-b-[3px] border-dark px-6 py-3 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center overflow-hidden shrink-0">
+          <div className="w-9 h-9 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
             <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
-          <h2 className="text-lg font-bold font-sans text-dark leading-tight">Admin Panel</h2>
+          <h2 className="text-base font-pixel text-dark leading-tight">Admin Panel</h2>
         </div>
       </header>
 
       {/* DESKTOP SIDEBAR */}
-      <aside className="hidden md:flex w-64 bg-white border-r-4 border-dark p-6 flex-col">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-full bg-white border-2 border-dark shadow-brutal flex items-center justify-center overflow-hidden shrink-0">
+      <aside className="hidden md:flex w-64 bg-white border-r-[4px] border-dark p-5 flex-col">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b-[3px] border-dark">
+          <div className="w-11 h-11 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
             <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
-          <h2 className="text-xl font-bold font-sans text-dark leading-tight">Admin Panel</h2>
+          <h2 className="text-base font-pixel text-dark leading-tight">Admin Panel</h2>
         </div>
-        <nav className="flex flex-col gap-2 flex-1 overflow-y-auto">
+        <nav className="flex flex-col gap-1.5 flex-1 overflow-y-auto">
           {menu.map((item) => {
             const isActive = pathname === item.path || (item.path !== '/admin/dashboard' && pathname.startsWith(item.path))
             return (
               <Link key={item.path} href={item.path} prefetch={true}>
-                <div className={`px-4 py-2.5 rounded-xl border-2 font-bold font-sans transition-all duration-150 cursor-pointer text-sm ${
+                <div className={`px-3 py-2 border-[2px] font-pixel transition-all duration-75 cursor-pointer text-xs ${
                   isActive
-                  ? 'bg-primary border-dark shadow-brutal translate-x-[-2px] translate-y-[-2px]'
+                  ? 'bg-primary border-dark shadow-[3px_3px_0px_#1E2A38] translate-x-[-2px] translate-y-[-2px]'
                   : 'bg-white border-transparent hover:border-dark hover:bg-background'
                 }`}>
                   {item.label}
@@ -109,11 +109,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             )
           })}
         </nav>
-        <Button variant="accent" onClick={handleLogout} className="mt-6">Logout</Button>
+        <Button variant="accent" onClick={handleLogout} className="mt-6 text-sm">⏻ Logout</Button>
       </aside>
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-2 border-dark z-40 flex justify-around items-center py-2 px-2 shadow-brutal">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-[3px] border-dark z-40 flex justify-around items-center py-2 px-2">
         {mobileMainItems.map((item) => {
           const isActive = pathname === item.path || (item.path !== '/admin/dashboard' && pathname.startsWith(item.path))
           // Get emoji/icon from label
@@ -123,13 +123,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           
           return (
             <Link key={item.path} href={item.path} className="flex-1 max-w-[70px]">
-              <div className={`flex flex-col items-center gap-0.5 py-1 rounded-lg border transition-all duration-150 ${
+              <div className={`flex flex-col items-center gap-0.5 py-1 border-[2px] transition-all duration-75 ${
                 isActive
-                ? 'bg-primary/20 border-dark'
+                ? 'bg-primary/30 border-dark shadow-[2px_2px_0px_#1E2A38]'
                 : 'border-transparent'
               }`}>
-                <span className="text-xl">{icon}</span>
-                <span className="text-[9px] font-bold font-sans text-dark truncate w-full text-center">{text}</span>
+                <span className="text-lg">{icon}</span>
+                <span className="text-[8px] font-pixel text-dark truncate w-full text-center">{text}</span>
               </div>
             </Link>
           )
@@ -137,12 +137,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Lainnya Toggle Button */}
         <button 
           onClick={() => setIsDrawerOpen(true)}
-          className={`flex-1 max-w-[70px] flex flex-col items-center gap-0.5 py-1 rounded-lg border transition-all duration-150 ${
-            isDrawerOpen ? 'bg-primary/20 border-dark' : 'border-transparent'
+          className={`flex-1 max-w-[70px] flex flex-col items-center gap-0.5 py-1 border-[2px] transition-all duration-75 ${
+            isDrawerOpen ? 'bg-primary/30 border-dark shadow-[2px_2px_0px_#1E2A38]' : 'border-transparent'
           }`}
         >
-          <span className="text-xl">➕</span>
-          <span className="text-[9px] font-bold font-sans text-dark">Lainnya</span>
+          <span className="text-lg">➕</span>
+          <span className="text-[8px] font-pixel text-dark">Lainnya</span>
         </button>
       </nav>
 
@@ -155,24 +155,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={() => setIsDrawerOpen(false)} 
           />
           {/* Sheet Panel */}
-          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-4 border-dark rounded-t-3xl z-50 p-6 max-h-[75vh] overflow-y-auto flex flex-col gap-4 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] drawer-sheet">
-            <div className="flex justify-between items-center pb-2 border-b border-dark/10">
-              <h3 className="font-bold text-lg font-sans text-dark">Menu Lainnya</h3>
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-[4px] border-dark z-50 p-5 max-h-[75vh] overflow-y-auto flex flex-col gap-3 drawer-sheet">
+            <div className="flex justify-between items-center pb-2 border-b-[2px] border-dark">
+              <h3 className="font-pixel text-base text-dark">Menu Lainnya</h3>
               <button 
                 onClick={() => setIsDrawerOpen(false)}
-                className="w-8 h-8 rounded-full border border-dark flex items-center justify-center font-bold text-dark hover:bg-background transition-colors"
+                className="w-7 h-7 border-[2px] border-dark flex items-center justify-center font-pixel text-sm text-dark hover:bg-background transition-colors duration-75"
               >
-                ✕
+              ✕
               </button>
             </div>
-            <nav className="grid grid-cols-2 gap-2 my-2 stagger-children">
+            <nav className="grid grid-cols-2 gap-2 my-1 stagger-children">
               {mobileOtherItems.map((item) => {
                 const isActive = pathname === item.path || pathname.startsWith(item.path)
                 return (
                   <Link key={item.path} href={item.path} onClick={() => setIsDrawerOpen(false)}>
-                    <div className={`px-3 py-2 rounded-xl border-2 font-bold font-sans transition-all duration-150 cursor-pointer text-xs animate-fade-in-up ${
+                    <div className={`px-3 py-2 border-[2px] font-pixel transition-all duration-75 cursor-pointer text-[11px] animate-fade-in-up ${
                       isActive
-                      ? 'bg-primary border-dark shadow-brutal'
+                      ? 'bg-primary border-dark shadow-[3px_3px_0px_#1E2A38]'
                       : 'bg-white border-dark/20 hover:border-dark hover:bg-background'
                     }`}>
                       {item.label}
@@ -181,8 +181,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 )
               })}
             </nav>
-            <Button variant="accent" onClick={() => { setIsDrawerOpen(false); handleLogout(); }} className="w-full mt-2">
-              Logout
+            <Button variant="accent" onClick={() => { setIsDrawerOpen(false); handleLogout(); }} className="w-full mt-2 text-sm">
+              ⏻ Logout
             </Button>
           </div>
         </>

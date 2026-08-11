@@ -17,10 +17,10 @@ export function Badge({ children, color = 'primary', className = '', ...props }:
 
   return (
     <span 
-      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border-2 border-dark font-bold text-sm ${colors[color]} ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-none border-2 border-dark font-pixel text-xs ${colors[color]} ${className}`}
       {...props}
     >
-      <span className="w-2 h-2 rounded-full bg-dark"></span>
+      <span className="w-1.5 h-1.5 bg-dark shrink-0"></span>
       {children}
     </span>
   );
