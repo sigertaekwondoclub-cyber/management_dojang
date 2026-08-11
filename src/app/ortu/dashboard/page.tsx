@@ -124,25 +124,25 @@ export default function OrtuDashboardPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Kartu Anak - RPG Character Sheet */}
-        <Card className="p-0 border-[3px] border-dark overflow-hidden flex flex-col h-full bg-dark">
+        <Card className="p-0 border-[3px] border-dark overflow-hidden flex flex-col h-full bg-white">
           <div className="h-20 bg-primary relative border-b-[3px] border-dark">
             <div className="absolute -bottom-8 left-5 w-20 h-20 bg-white border-[4px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center text-3xl overflow-hidden">
               👤
             </div>
           </div>
-          <div className="pt-12 px-5 pb-5 text-white">
+          <div className="pt-12 px-5 pb-5 text-dark">
             <h2 className="font-pixel text-xl">{siswa.nama}</h2>
             <div className="mt-4 flex flex-col gap-2">
-              <div className="flex justify-between border-b border-white/10 pb-2">
-                <span className="text-white/60 font-pixel text-[11px]">CLASS</span>
+              <div className="flex justify-between border-b border-dark/10 pb-2">
+                <span className="text-dark/50 font-pixel text-[11px]">CLASS</span>
                 <span className="font-pixel text-sm">{siswa.sabuk_saat_ini}</span>
               </div>
-              <div className="flex justify-between border-b border-white/10 pb-2">
-                <span className="text-white/60 font-pixel text-[11px]">GUILD</span>
+              <div className="flex justify-between border-b border-dark/10 pb-2">
+                <span className="text-dark/50 font-pixel text-[11px]">GUILD</span>
                 <span className="font-pixel text-sm">{siswa.program_kelas?.nama_program || '-'}</span>
               </div>
               <div className="flex justify-between pb-1">
-                <span className="text-white/60 font-pixel text-[11px]">AGE</span>
+                <span className="text-dark/50 font-pixel text-[11px]">AGE</span>
                 <span className="font-pixel text-sm">{new Date().getFullYear() - new Date(siswa.tgl_lahir).getFullYear()} Tahun</span>
               </div>
             </div>
