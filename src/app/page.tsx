@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import Link from "next/link";
 
-const supabase = createClient();
+
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -18,13 +17,16 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchStats() {
-      const [siswaRes, pelatihRes] = await Promise.all([
-        supabase.from("siswa").select("id", { count: "exact", head: true }).eq("status_aktif", true),
-        supabase.from("pelatih").select("id", { count: "exact", head: true }).eq("status_aktif", true),
-      ]);
-      setSiswaAktif(siswaRes.count || 0);
-      setPelatihAktif(pelatihRes.count || 0);
-      setLoadingStats(false);
+      try {
+        const res = await fetch("/api/public-stats");
+        const data = await res.json();
+        setSiswaAktif(data.siswaAktif ?? 0);
+        setPelatihAktif(data.pelatihAktif ?? 0);
+      } catch {
+        // fallback: keep 0
+      } finally {
+        setLoadingStats(false);
+      }
     }
     fetchStats();
   }, []);
@@ -103,13 +105,13 @@ export default function Home() {
     {
       name: "Jalian Pebriandy, S.Kom",
       grade: "SABUK HITAM DAN 1 KUKKIWON",
-      desc: "Pelatih utama dan co-founder Siger Taekwondo Club. Aktif membina atlet di berbagai jenjang latihan dan kompetisi di Lampung.",
+      desc: "Pelatih aktif Siger Taekwondo Club yang membina atlet di berbagai jenjang latihan dan kompetisi.",
       certs: ["Pelatih Bersertifikat", "Dan 1 Kukkiwon"]
     },
     {
       name: "Yuli Astiti, S.Kom",
       grade: "SABUK HITAM DAN 1 KUKKIWON",
-      desc: "Pelatih aktif Siger TC yang fokus pada pembinaan teknik dasar, poomsae, dan pengembangan atlet usia junior.",
+      desc: "Pelatih aktif Siger Taekwondo Club yang membina atlet di berbagai jenjang latihan dan kompetisi.",
       certs: ["Pelatih Bersertifikat", "Dan 1 Kukkiwon"]
     }
   ];
@@ -418,7 +420,7 @@ export default function Home() {
                 <Button variant="primary" className="px-8 py-3">✦ DAFTAR SEKARANG</Button>
               </Link>
               <a
-                href="https://wa.me/6285369900000"
+                href="https://wa.me/6281513333178"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -448,7 +450,7 @@ export default function Home() {
             <span className="font-pixel text-xs text-white/50">CONNECT</span>
             <div className="flex gap-4">
               <a
-                href="https://instagram.com"
+                href="https://www.instagram.com/sigertkdclub/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-white text-dark border-2 border-white flex items-center justify-center hover:bg-accent transition-colors shadow-[2px_2px_0px_#ffffff]"
@@ -456,7 +458,7 @@ export default function Home() {
                 <span className="font-pixel text-sm font-bold">IG</span>
               </a>
               <a
-                href="https://wa.me"
+                href="https://wa.me/6281513333178"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-10 h-10 bg-white text-dark border-2 border-white flex items-center justify-center hover:bg-primary transition-colors shadow-[2px_2px_0px_#ffffff]"
