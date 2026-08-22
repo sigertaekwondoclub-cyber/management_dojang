@@ -37,6 +37,7 @@ export default function AdminDashboardPage() {
   const [distribusiSabuk, setDistribusiSabuk] = useState<{ sabuk: string; count: number }[]>([])
   const [alphaWarning, setAlphaWarning] = useState<{ nama: string; siswa_id: string; count: number }[]>([])
   const [honorBelumBayar, setHonorBelumBayar] = useState<{ count: number; total: number }>({ count: 0, total: 0 })
+  const [payrollGenerated, setPayrollGenerated] = useState(false)
 
   const [loading, setLoading] = useState(true)
 
@@ -48,6 +49,16 @@ export default function AdminDashboardPage() {
     const today = now.toISOString().split('T')[0]
     const bulanStr = String(bulan).padStart(2, '0')
     const startBulan = `${tahun}-${bulanStr}-01`
+
+    // Ambil payroll_run bulan ini untuk kalkulasi honor pelatih
+    const payrollRunResult = await supabase
+      .from('payroll_runs')
+      .select('id, coach_pool_amount')
+      .eq('bulan', bulan)
+      .eq('tahun', tahun)
+      .maybeSingle()
+
+    const payrollRunId = payrollRunResult.data?.id || null
 
     const [
       siswaResult, daftarResult, pelatihResult, iuranResult,
@@ -63,7 +74,10 @@ export default function AdminDashboardPage() {
       supabase.from('pelatih').select('id', { count: 'exact', head: true }).eq('status_aktif', true),
       supabase.from('iuran').select('nominal, status_bayar').eq('bulan', bulan).eq('tahun', tahun),
       supabase.from('keuangan_club').select('jenis, nominal').gte('tgl', startBulan),
-      supabase.from('honor_pelatih').select('honor_diterima').eq('tahun', tahun).eq('bulan', bulan).eq('status_dibayar', true),
+      // Honor sudah dibayar: dari payroll_details dengan status_dibayar = true
+      payrollRunId
+        ? supabase.from('payroll_details').select('total_payout').eq('payroll_run_id', payrollRunId).eq('status_dibayar', true)
+        : Promise.resolve({ data: [] }),
       supabase.from('ujian_sabuk').select('tgl_ujian').gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
       supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1),
       supabase.from('pesanan_merchant').select('id', { count: 'exact', head: true }).eq('status', 'menunggu_verifikasi'),
@@ -74,8 +88,11 @@ export default function AdminDashboardPage() {
       supabase.from('absensi_siswa').select('siswa_id, kelas, status_hadir').gte('tgl', startBulan).lte('tgl', today),
       supabase.from('iuran').select('siswa_id, siswa:siswa_id(nama)').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'belum_bayar'),
       supabase.from('siswa').select('sabuk_saat_ini').eq('status_aktif', true),
-      supabase.from('absensi_siswa').select('siswa_id, siswa:siswa_id(nama)').eq('status_hadir', 'alpha').gte('tgl', startBulan),
-      supabase.from('honor_pelatih').select('honor_diterima').eq('tahun', tahun).eq('bulan', bulan).eq('status_dibayar', false),
+      supabase.from('absensi_siswa').select('siswa_id, siswa:siswa_id(nama)').eq('status_hadir', 'alpha').gte('tgl', startBulan).lte('tgl', today),
+      // Honor belum dibayar: dari payroll_details dengan status_dibayar = false
+      payrollRunId
+        ? supabase.from('payroll_details').select('total_payout').eq('payroll_run_id', payrollRunId).eq('status_dibayar', false)
+        : Promise.resolve({ data: [] }),
     ])
 
     // ── Existing stats ──
@@ -95,7 +112,8 @@ export default function AdminDashboardPage() {
       if (c.jenis === 'income') income += Number(c.nominal)
       if (c.jenis === 'expense') expense += Number(c.nominal)
     })
-    honorResult.data?.forEach(h => { expense += Number(h.honor_diterima) })
+    // Honor sudah dibayar dihitung dari payroll_details (total_payout)
+    honorResult.data?.forEach((h: any) => { expense += Number(h.total_payout) })
 
     setStats({ siswaAktif, pelatihAktif: pelatihAktif || 0, iuranTotal, iuranTerkumpul, tagihanMenunggu, daftarBaru, pesananMerchantMenunggu: merchantMenungguResult.count || 0, merchantPemasukan, income, expense })
     setUjianMendatang(ujianResult.data?.[0] || null)
@@ -157,10 +175,12 @@ export default function AdminDashboardPage() {
     )
 
     // ── Widget 6: Honor Belum Bayar ──
+    // Jika payroll belum di-generate bulan ini, widget akan tampil kosong/0
     const hbData = honorBelumResult.data || []
+    setPayrollGenerated(payrollRunId !== null)
     setHonorBelumBayar({
       count: hbData.length,
-      total: hbData.reduce((acc: number, h: any) => acc + Number(h.honor_diterima), 0),
+      total: hbData.reduce((acc: number, h: any) => acc + Number(h.total_payout), 0),
     })
 
     setLoading(false)
@@ -350,7 +370,12 @@ export default function AdminDashboardPage() {
             )}
           </div>
 
-          {honorBelumBayar.count === 0 ? (
+          {!payrollGenerated ? (
+            <div className="text-center py-6 text-dark/40 font-sans text-sm">
+              <div className="text-3xl mb-2">📭</div>
+              Payroll bulan ini belum di-generate
+            </div>
+          ) : honorBelumBayar.count === 0 ? (
             <div className="text-center py-6 text-dark/40 font-sans text-sm">
               <div className="text-3xl mb-2">✅</div>
               Semua honor sudah dibayar
