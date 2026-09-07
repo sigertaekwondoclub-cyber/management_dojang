@@ -243,7 +243,11 @@ export default function PelatihDashboardPage() {
               ? '*Hasil kalkulasi payroll resmi yang telah dirilis club.'
               : '*Estimasi berdasarkan porsi iuran terbayar & kelas mengajar.'}
           </div>
+          <Link href="/pelatih/estimasi" className="text-xs font-bold text-dark mt-3 block hover:underline">
+            📊 Lihat rincian kalkulasi detail →
+          </Link>
         </Card>
+
 
         {/* Ujian Pending */}
         <Card className={`p-6 border-2 border-dark hover:-translate-y-1 transition-transform ${stats.ujianPending > 0 ? 'bg-[#FDE68A]' : 'bg-background'}`}>

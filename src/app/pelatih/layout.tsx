@@ -65,11 +65,12 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
     { label: '📋 Input Absensi', path: '/pelatih/absensi' },
     { label: '🏅 Ujian Sabuk', path: '/pelatih/ujian' },
     { label: '🥋 Event Kompetisi', path: '/pelatih/event' },
+    { label: '📊 Estimasi Honor', path: '/pelatih/estimasi' },
     { label: '🏆 Honor Saya', path: '/pelatih/honor' },
   ]
 
   // Main items for the bottom navigation bar on mobile
-  const mobileMainPaths = ['/pelatih/dashboard', '/pelatih/absensi', '/pelatih/ujian']
+  const mobileMainPaths = ['/pelatih/dashboard', '/pelatih/absensi', '/pelatih/estimasi']
   const mobileMainItems = menu.filter(item => mobileMainPaths.includes(item.path))
   const mobileOtherItems = menu.filter(item => !mobileMainPaths.includes(item.path))
 
