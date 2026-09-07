@@ -13,6 +13,7 @@ export default function PelatihDashboardPage() {
   const [stats, setStats] = useState({
     sesiBulanIni: 0,
     estimasiHonor: 0,
+    isOfficialPayroll: false,
     ujianPending: 0
   })
   const [loading, setLoading] = useState(true)
@@ -43,55 +44,120 @@ export default function PelatihDashboardPage() {
     const startDate = `${tahun}-${String(bulan).padStart(2, '0')}-01`
     const endDate = new Date(tahun, bulan, 0).toLocaleDateString('sv-SE')
 
-    // Fetch pelatih metrics in parallel
+    // Cek snapshot payroll_runs resmi untuk bulan/tahun ini
+    const { data: runData } = await supabase
+      .from('payroll_runs')
+      .select('id')
+      .eq('bulan', bulan)
+      .eq('tahun', tahun)
+      .maybeSingle()
+
+    let estimasiHonor = 0
+    let isOfficialPayroll = false
+
+    if (runData) {
+      const { data: detailData } = await supabase
+        .from('payroll_details')
+        .select('total_payout')
+        .eq('payroll_run_id', runData.id)
+        .eq('pelatih_id', profile.pelatih_id)
+        .maybeSingle()
+
+      if (detailData) {
+        estimasiHonor = Number(detailData.total_payout || 0)
+        isOfficialPayroll = true
+      }
+    }
+
+    if (!isOfficialPayroll) {
+      // Hitung estimasi real-time berbasis formula persentase & revenue kelas persis seperti actions.ts
+      const [
+        pengaturanRes,
+        iuranRes,
+        classesRes,
+        studentsRes,
+        absensiRes,
+        coachesRes
+      ] = await Promise.all([
+        supabase.from('pengaturan_club').select('pct_coach_pool, pct_founder_margin').limit(1).maybeSingle(),
+        supabase.from('iuran').select('nominal').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'lunas'),
+        supabase.from('program_kelas').select('*').eq('status_aktif', true),
+        supabase.from('siswa').select('program_kelas_id').eq('status_aktif', true),
+        supabase.from('absensi_pelatih').select('id, program_kelas_id, pelatih_id').gte('tgl', startDate).lte('tgl', endDate),
+        supabase.from('pelatih').select('id, is_founder').eq('status_aktif', true)
+      ])
+
+      const pctCoachPool = Number(pengaturanRes.data?.pct_coach_pool ?? 0.45)
+      const pctFounderMargin = Number(pengaturanRes.data?.pct_founder_margin ?? 0.08)
+
+      const totalIncome = (iuranRes.data || []).reduce((acc, curr) => acc + Number(curr.nominal || 0), 0)
+      const coachPoolAmount = totalIncome * pctCoachPool
+      const founderMarginAmount = totalIncome * pctFounderMargin
+
+      const activeClasses = classesRes.data || []
+      const allActiveStudents = studentsRes.data || []
+      const allSessions = absensiRes.data || []
+      const allCoaches = coachesRes.data || []
+
+      const classRevenue: Record<string, number> = {}
+      let totalClassRevenue = 0
+
+      for (const prog of activeClasses) {
+        const count = allActiveStudents.filter(s => s.program_kelas_id === prog.id).length
+        const revenue = count * Number(prog.biaya_bulanan || 0)
+        classRevenue[prog.id] = revenue
+        totalClassRevenue += revenue
+      }
+
+      const ratePerSession: Record<string, number> = {}
+      for (const prog of activeClasses) {
+        const proporsi = totalClassRevenue > 0 ? (classRevenue[prog.id] / totalClassRevenue) : 0
+        const classPool = coachPoolAmount * proporsi
+        const completedCount = allSessions.filter(s => s.program_kelas_id === prog.id).length
+        ratePerSession[prog.id] = completedCount > 0 ? (classPool / completedCount) : 0
+      }
+
+      const taughtSessions = allSessions.filter(s => s.pelatih_id === profile.pelatih_id)
+      let teachingHonor = 0
+      for (const sess of taughtSessions) {
+        if (sess.program_kelas_id && ratePerSession[sess.program_kelas_id]) {
+          teachingHonor += ratePerSession[sess.program_kelas_id]
+        }
+      }
+
+      const myCoachInfo = allCoaches.find(c => c.id === profile.pelatih_id)
+      const founderCoaches = allCoaches.filter(c => c.is_founder)
+      const founderShare = (myCoachInfo?.is_founder && founderCoaches.length > 0)
+        ? (founderMarginAmount / founderCoaches.length)
+        : 0
+
+      estimasiHonor = Math.round(teachingHonor + founderShare)
+    }
+
+    // Parallel fetch metric pendukung dashboard lainnya
     const [
       absensiResult,
-      pengaturanResult,
-      iuranResult,
       ujianResult,
-      // NEW Queries
       absensiSiswaResult,
       alphaSiswaResult,
       honorResult
     ] = await Promise.all([
       supabase.from('absensi_pelatih').select('pelatih_id').gte('tgl', startDate).lte('tgl', endDate),
-      supabase.from('pengaturan_club').select('persentase_pool_honor').limit(1),
-      supabase.from('iuran').select('nominal').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'lunas'),
       supabase.from('ujian_sabuk').select('id').is('hasil', null),
-      // Absensi murid kelas pelatih bulan ini
       supabase.from('absensi_siswa').select('kelas, status_hadir').eq('pelatih_id_pengajar', profile.pelatih_id).gte('tgl', startDate).lte('tgl', endDate),
-      // Siswa alpha terbanyak di kelas pelatih bulan ini
       supabase.from('absensi_siswa').select('siswa_id, status_hadir, siswa:siswa_id(nama)').eq('pelatih_id_pengajar', profile.pelatih_id).eq('status_hadir', 'alpha').gte('tgl', startDate).lte('tgl', endDate),
-      // Riwayat Honor / Payroll
       supabase.from('payroll_details').select('total_payout, status_dibayar, payroll_runs(bulan, tahun)').eq('pelatih_id', profile.pelatih_id).order('created_at', { ascending: false }).limit(3)
     ])
 
-    const absensiList = absensiResult.data
-    let mySesi = 0
-    let totalSesiAll = 0
-    absensiList?.forEach(a => {
-      totalSesiAll++
-      if (a.pelatih_id === profile.pelatih_id) mySesi++
-    })
-
-    let persentase = 40
-    if (pengaturanResult.data?.[0]) persentase = pengaturanResult.data[0].persentase_pool_honor
-
-    const iuranData = iuranResult.data
-    let iuranTerkumpul = 0
-    iuranData?.forEach(i => iuranTerkumpul += Number(i.nominal))
-
-    const totalPool = (iuranTerkumpul * persentase) / 100
-    let estimasiHonor = 0
-    if (totalSesiAll > 0) {
-      estimasiHonor = (mySesi / totalSesiAll) * totalPool
-    }
+    const absensiList = absensiResult.data || []
+    const mySesi = absensiList.filter(a => a.pelatih_id === profile.pelatih_id).length
 
     const ujianData = ujianResult.data
-    
+
     setStats({
       sesiBulanIni: mySesi,
       estimasiHonor,
+      isOfficialPayroll,
       ujianPending: ujianData?.length || 0
     })
 
@@ -165,12 +231,18 @@ export default function PelatihDashboardPage() {
         <Card className="p-6 border-2 border-dark bg-[#BBF7D0] hover:-translate-y-1 transition-transform">
           <div className="flex justify-between items-start">
             <div>
-              <div className="text-sm font-sans font-bold text-dark/60">Estimasi Honor (Real-time)</div>
+              <div className="text-sm font-sans font-bold text-dark/60">
+                {stats.isOfficialPayroll ? 'Honor Bulan Ini (Payroll Resmi)' : 'Estimasi Honor (Real-time)'}
+              </div>
               <div className="text-2xl font-bold font-sans text-dark mt-2">{formatRupiah(stats.estimasiHonor)}</div>
             </div>
             <div className="text-4xl opacity-80">💰</div>
           </div>
-          <div className="text-xs text-dark/70 mt-3 font-sans">*Dihitung dari iuran terkumpul saat ini dibagi proporsi sesi mengajar.</div>
+          <div className="text-xs text-dark/70 mt-3 font-sans">
+            {stats.isOfficialPayroll
+              ? '*Hasil kalkulasi payroll resmi yang telah dirilis club.'
+              : '*Estimasi berdasarkan porsi iuran terbayar & kelas mengajar.'}
+          </div>
         </Card>
 
         {/* Ujian Pending */}
