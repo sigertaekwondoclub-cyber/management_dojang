@@ -207,9 +207,10 @@ export default function AdminKeuanganPage() {
   const allTransaksi = useMemo<TransaksiUnified[]>(() => {
     const list: TransaksiUnified[] = []
 
-    // Manual transactions
+    // 1. Dari tabel keuangan_club (manual & synced merchant)
     for (const tx of manualList) {
       const d = new Date(tx.tgl + 'T00:00:00')
+      const isMerchant = tx.sumber === 'merchant' || tx.kategori === 'Penjualan Merchant'
       list.push({
         id: tx.id,
         tgl: tx.tgl,
@@ -219,13 +220,20 @@ export default function AdminKeuanganPage() {
         kategori: tx.kategori,
         keterangan: tx.keterangan,
         nominal: Number(tx.nominal),
-        sumber: 'manual',
-        canEdit: true,
-        canDelete: true,
+        sumber: isMerchant ? 'merchant' : ((tx.sumber as Sumber) || 'manual'),
+        canEdit: !isMerchant,
+        canDelete: !isMerchant,
       })
     }
 
-    // Iuran lunas
+    // Tag pesanan yang sudah tercatat di keuangan_club
+    const existingOrderIds = new Set<string>()
+    manualList.forEach(tx => {
+      const match = tx.keterangan?.match(/\[Pesanan #([a-zA-Z0-9_-]+)\]/)
+      if (match) existingOrderIds.add(match[1])
+    })
+
+    // 2. Iuran lunas
     for (const i of iuranLunas) {
       list.push({
         id: `iuran_${i.id}`,
@@ -242,7 +250,7 @@ export default function AdminKeuanganPage() {
       })
     }
 
-    // Honor dibayar
+    // 3. Honor dibayar
     for (const h of honorDibayar) {
       list.push({
         id: `honor_${h.id}`,
@@ -259,21 +267,24 @@ export default function AdminKeuanganPage() {
       })
     }
 
-    // Pesanan Merchant lunas
+    // 4. Pesanan Merchant lunas (fallback jika belum tersimpan di tabel keuangan_club)
     for (const m of merchantLunas) {
-      list.push({
-        id: `merchant_${m.id}`,
-        tgl: m.tgl,
-        bulan: m.bulan,
-        tahun: m.tahun,
-        jenis: 'income',
-        kategori: 'Penjualan Merchant',
-        keterangan: m.keterangan,
-        nominal: m.total,
-        sumber: 'merchant',
-        canEdit: false,
-        canDelete: false,
-      })
+      const shortId = m.id.slice(0, 8)
+      if (!existingOrderIds.has(shortId)) {
+        list.push({
+          id: `merchant_${m.id}`,
+          tgl: m.tgl,
+          bulan: m.bulan,
+          tahun: m.tahun,
+          jenis: 'income',
+          kategori: 'Penjualan Merchant',
+          keterangan: m.keterangan,
+          nominal: m.total,
+          sumber: 'merchant',
+          canEdit: false,
+          canDelete: false,
+        })
+      }
     }
 
     // Sort by tanggal descending

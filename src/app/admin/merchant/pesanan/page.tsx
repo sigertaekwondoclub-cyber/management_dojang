@@ -52,7 +52,50 @@ export default function AdminPesananMerchantPage() {
   const handleUpdate = async () => {
     if (!selected) return
     setSaving(true)
-    await supabase.from('pesanan_merchant').update({ status: newStatus, catatan_admin: catatanAdmin || null }).eq('id', selected.id)
+    const isPaid = ['lunas', 'diproses', 'siap_diambil'].includes(newStatus)
+    const wasPaid = ['lunas', 'diproses', 'siap_diambil'].includes(selected.status)
+
+    // 1. Update status pesanan
+    const { error: updateErr } = await supabase
+      .from('pesanan_merchant')
+      .update({ status: newStatus, catatan_admin: catatanAdmin || null })
+      .eq('id', selected.id)
+
+    if (updateErr) {
+      alert('Gagal update status pesanan: ' + updateErr.message)
+      setSaving(false)
+      return
+    }
+
+    // 2. Sinkronkan ke tabel keuangan_club
+    const orderTag = `[Pesanan #${selected.id.slice(0, 8)}]`
+    if (isPaid && !wasPaid) {
+      // Cek apakah sudah pernah tercatat
+      const { data: existing } = await supabase
+        .from('keuangan_club')
+        .select('id')
+        .ilike('keterangan', `%${orderTag}%`)
+        .maybeSingle()
+
+      if (!existing) {
+        const siswaNama = (selected.siswa as any)?.nama || 'Siswa'
+        await supabase.from('keuangan_club').insert({
+          tgl: new Date().toISOString().split('T')[0],
+          jenis: 'income',
+          kategori: 'Penjualan Merchant',
+          nominal: Number(selected.total_harga || 0),
+          keterangan: `Penjualan Toko ${orderTag} — ${siswaNama}`,
+          sumber: 'merchant'
+        })
+      }
+    } else if (!isPaid && wasPaid) {
+      // Jika status dibatalkan atau dikembalikan ke belum bayar
+      await supabase
+        .from('keuangan_club')
+        .delete()
+        .ilike('keterangan', `%${orderTag}%`)
+    }
+
     setSaving(false)
     setSelected(null)
     fetchPesanan()
