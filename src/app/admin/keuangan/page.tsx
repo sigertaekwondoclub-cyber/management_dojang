@@ -19,7 +19,7 @@ const BULAN_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu',
 const BULAN_FULL = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
-const KATEGORI_INCOME = ['Iuran Bulanan', 'Daftar Ulang', 'Donasi', 'Lainnya']
+const KATEGORI_INCOME = ['Iuran Bulanan', 'Penjualan Merchant', 'Daftar Ulang', 'Donasi', 'Lainnya']
 const KATEGORI_EXPENSE = ['Honor Pelatih', 'Perlengkapan', 'Sewa Tempat', 'Administrasi', 'Lainnya']
 
 // ──────────────────────────────────────────
@@ -44,7 +44,7 @@ function formatTgl(tgl: string) {
 // ──────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────
-type Sumber = 'manual' | 'iuran' | 'honor'
+type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant'
 
 interface TransaksiUnified {
   id: string
@@ -73,9 +73,10 @@ interface EditForm {
 // Badge sumber config
 // ──────────────────────────────────────────
 const SUMBER_CONFIG: Record<Sumber, { label: string; color: 'primary' | 'secondary' | 'dark' | 'accent' }> = {
-  manual:  { label: '✏️ Manual',        color: 'secondary' },
-  iuran:   { label: '💰 Iuran',         color: 'primary'   },
-  honor:   { label: '🏆 Honor Pelatih', color: 'dark'      },
+  manual:   { label: '✏️ Manual',        color: 'secondary' },
+  iuran:    { label: '💰 Iuran',         color: 'primary'   },
+  honor:    { label: '🏆 Honor Pelatih', color: 'dark'      },
+  merchant: { label: '🛒 Toko Merchant', color: 'accent'    },
 }
 
 // ──────────────────────────────────────────
@@ -88,12 +89,13 @@ export default function AdminKeuanganPage() {
   const [tahunFilter, setTahunFilter] = useState(String(now.getFullYear()))
   const [bulanFilter, setBulanFilter] = useState('0') // '0' = Semua Bulan
   const [jenisFilter, setJenisFilter] = useState('semua') // semua | income | expense
-  const [sumberFilter, setSumberFilter] = useState('semua') // semua | manual | iuran | honor
+  const [sumberFilter, setSumberFilter] = useState('semua') // semua | manual | iuran | honor | merchant
 
   // ── Data state
   const [manualList, setManualList] = useState<KeuanganClub[]>([])
   const [iuranLunas, setIuranLunas] = useState<{ bulan: number; tahun: number; total: number; keterangan: string; tgl: string; id: string; nominal: number; siswa_nama: string }[]>([])
   const [honorDibayar, setHonorDibayar] = useState<{ bulan: number; tahun: number; total: number; tgl: string; id: string; pelatih_nama: string }[]>([])
+  const [merchantLunas, setMerchantLunas] = useState<{ bulan: number; tahun: number; total: number; keterangan: string; tgl: string; id: string; siswa_nama: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   // ── Add form state
@@ -169,6 +171,31 @@ export default function AdminKeuanganPage() {
       }))
     setHonorDibayar(honorMapped)
 
+    // 4. Pesanan Merchant (status lunas, diproses, atau siap_diambil)
+    const { data: merchantData } = await supabase
+      .from('pesanan_merchant')
+      .select('id, total_harga, status, created_at, updated_at, siswa:siswa_id(nama)')
+      .in('status', ['lunas', 'diproses', 'siap_diambil'])
+      .gte('created_at', `${tahun}-01-01T00:00:00`)
+      .lte('created_at', `${tahun}-12-31T23:59:59`)
+      .order('created_at', { ascending: false })
+
+    const merchantMapped = (merchantData || []).map((m: any) => {
+      const rawDate = m.updated_at || m.created_at
+      const dateStr = rawDate ? rawDate.split('T')[0] : `${tahun}-01-01`
+      const d = new Date(rawDate)
+      return {
+        id: m.id,
+        tgl: dateStr,
+        bulan: !isNaN(d.getMonth()) ? d.getMonth() + 1 : 1,
+        tahun: !isNaN(d.getFullYear()) ? d.getFullYear() : tahun,
+        total: Number(m.total_harga || 0),
+        keterangan: `Pesanan Merchant (${m.status === 'lunas' ? 'Lunas' : m.status === 'diproses' ? 'Diproses' : 'Siap Diambil'}) — ${m.siswa?.nama || 'Siswa'}`,
+        siswa_nama: m.siswa?.nama || 'Siswa',
+      }
+    })
+    setMerchantLunas(merchantMapped)
+
     setLoading(false)
   }, [tahunFilter])
 
@@ -232,9 +259,26 @@ export default function AdminKeuanganPage() {
       })
     }
 
+    // Pesanan Merchant lunas
+    for (const m of merchantLunas) {
+      list.push({
+        id: `merchant_${m.id}`,
+        tgl: m.tgl,
+        bulan: m.bulan,
+        tahun: m.tahun,
+        jenis: 'income',
+        kategori: 'Penjualan Merchant',
+        keterangan: m.keterangan,
+        nominal: m.total,
+        sumber: 'merchant',
+        canEdit: false,
+        canDelete: false,
+      })
+    }
+
     // Sort by tanggal descending
     return list.sort((a, b) => b.tgl.localeCompare(a.tgl))
-  }, [manualList, iuranLunas, honorDibayar])
+  }, [manualList, iuranLunas, honorDibayar, merchantLunas])
 
   // ── Filtered transactions
   const filteredTransaksi = useMemo(() => {
@@ -271,6 +315,7 @@ export default function AdminKeuanganPage() {
 
   // ── Income breakdown
   const incomeFromIuran = useMemo(() => allTransaksi.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
+  const incomeFromMerchant = useMemo(() => allTransaksi.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const incomeFromManual = useMemo(() => allTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'income').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const expenseFromHonor = useMemo(() => allTransaksi.filter(t => t.sumber === 'honor').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const expenseFromManual = useMemo(() => allTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
@@ -356,7 +401,7 @@ export default function AdminKeuanganPage() {
       BULAN_FULL[tx.bulan],
       tx.tahun,
       tx.jenis === 'income' ? 'Income' : 'Expense',
-      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : 'Honor Pelatih',
+      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : 'Toko Merchant',
       tx.kategori,
       tx.keterangan,
       tx.nominal,
@@ -424,6 +469,10 @@ export default function AdminKeuanganPage() {
             <div className="flex justify-between text-xs text-dark/50 font-sans">
               <span>💰 Iuran Siswa</span>
               <span className="font-bold text-dark/70">{formatRupiah(incomeFromIuran)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-dark/50 font-sans">
+              <span>🛒 Toko Merchant</span>
+              <span className="font-bold text-dark/70">{formatRupiah(incomeFromMerchant)}</span>
             </div>
             <div className="flex justify-between text-xs text-dark/50 font-sans">
               <span>✏️ Manual</span>
@@ -562,6 +611,7 @@ export default function AdminKeuanganPage() {
                 <option value="semua">Semua Sumber</option>
                 <option value="manual">✏️ Manual</option>
                 <option value="iuran">💰 Iuran Siswa</option>
+                <option value="merchant">🛒 Toko Merchant</option>
                 <option value="honor">🏆 Honor Pelatih</option>
               </select>
             </div>

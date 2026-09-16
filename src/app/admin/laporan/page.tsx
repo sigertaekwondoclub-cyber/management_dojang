@@ -49,17 +49,41 @@ export default function AdminLaporanPage() {
   const fetchKeuangan = useCallback(async () => {
     const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
-    const { data: iuranRows } = await supabase
-      .from('iuran')
-      .select('nominal, status_bayar, siswa:siswa_id(nama)')
-      .eq('bulan', bul).eq('tahun', tah)
-    const { data: transaksi } = await supabase
-      .from('transaksi_keuangan')
-      .select('*')
-      .gte('tgl', `${tah}-${filterBulan}-01`)
-      .lte('tgl', `${tah}-${filterBulan}-31`)
-      .order('tgl', { ascending: true })
-    setKeuanganData([{ iuranRows: iuranRows || [], transaksi: transaksi || [] }])
+    const startTgl = `${tah}-${filterBulan}-01`
+    const endTgl = new Date(tah, bul, 0).toISOString().split('T')[0]
+
+    const [iuranRes, merchantRes, manualRes, honorRes] = await Promise.all([
+      supabase
+        .from('iuran')
+        .select('nominal, status_bayar, siswa:siswa_id(nama)')
+        .eq('bulan', bul).eq('tahun', tah),
+      supabase
+        .from('pesanan_merchant')
+        .select('id, total_harga, status, created_at, updated_at, siswa:siswa_id(nama)')
+        .in('status', ['lunas', 'diproses', 'siap_diambil'])
+        .gte('created_at', `${startTgl}T00:00:00`)
+        .lte('created_at', `${endTgl}T23:59:59`)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('keuangan_club')
+        .select('*')
+        .gte('tgl', startTgl)
+        .lte('tgl', endTgl)
+        .order('tgl', { ascending: true }),
+      supabase
+        .from('payroll_runs')
+        .select('*, payroll_details(*, pelatih:pelatih_id(nama))')
+        .eq('bulan', bul)
+        .eq('tahun', tah)
+        .maybeSingle(),
+    ])
+
+    setKeuanganData([{
+      iuranRows: iuranRes.data || [],
+      merchantRows: merchantRes.data || [],
+      transaksi: manualRes.data || [],
+      payrollRun: honorRes.data || null,
+    }])
   }, [filterBulan, filterTahun])
 
   const fetchKehadiran = useCallback(async () => {
@@ -171,7 +195,31 @@ export default function AdminLaporanPage() {
 
   const handleDownloadCSV = () => {
     const bul = BULAN_NAMES[parseInt(filterBulan)]
-    if (activeTab === 'kehadiran') {
+    if (activeTab === 'keuangan') {
+      const rows: (string | number)[][] = []
+      // 1. Iuran lunas
+      iuranRows.filter((r: any) => r.status_bayar === 'lunas').forEach((r: any) => {
+        rows.push(['Pemasukan', 'Iuran Bulanan', `Iuran ${(r.siswa as any)?.nama || 'Siswa'}`, r.nominal])
+      })
+      // 2. Merchant lunas
+      merchantRows.forEach((r: any) => {
+        rows.push(['Pemasukan', 'Penjualan Merchant', `Pesanan Merchant — ${(r.siswa as any)?.nama || 'Siswa'}`, r.total_harga])
+      })
+      // 3. Transaksi manual
+      transaksiRows.forEach((r: any) => {
+        rows.push([r.jenis === 'income' ? 'Pemasukan' : 'Pengeluaran', r.kategori, r.keterangan, r.nominal])
+      })
+      // 4. Honor pelatih
+      const pr = keuanganData[0]?.payrollRun
+      ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
+        rows.push(['Pengeluaran', 'Honor Pelatih', `Honor ${d.pelatih?.nama || 'Pelatih'}`, d.total_payout])
+      })
+
+      downloadCSV(`laporan-keuangan-${bul}-${filterTahun}.csv`,
+        rows,
+        ['Jenis', 'Kategori', 'Keterangan', 'Nominal (Rp)']
+      )
+    } else if (activeTab === 'kehadiran') {
       downloadCSV(`kehadiran-${bul}-${filterTahun}.csv`,
         kehadiranData.map(s => {
           const total = s.hadir + s.izin + s.sakit + s.alpha
@@ -222,11 +270,19 @@ export default function AdminLaporanPage() {
   ]
 
   const iuranRows = keuanganData[0]?.iuranRows || []
+  const merchantRows = keuanganData[0]?.merchantRows || []
   const transaksiRows = keuanganData[0]?.transaksi || []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalPemasukan = iuranRows.filter((r: any) => r.status_bayar === 'lunas').reduce((s: number, r: any) => s + r.nominal, 0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalPengeluaran = transaksiRows.filter((r: any) => r.jenis === 'keluar').reduce((s: number, r: any) => s + r.nominal, 0)
+  const payrollRun = keuanganData[0]?.payrollRun || null
+
+  const pemasukanIuran = iuranRows.filter((r: any) => r.status_bayar === 'lunas').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  const pemasukanMerchant = merchantRows.reduce((s: number, r: any) => s + Number(r.total_harga || 0), 0)
+  const pemasukanManual = transaksiRows.filter((r: any) => r.jenis === 'income').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  const totalPemasukan = pemasukanIuran + pemasukanMerchant + pemasukanManual
+
+  const pengeluaranHonor = (payrollRun?.payroll_details || []).filter((d: any) => d.status_dibayar).reduce((s: number, d: any) => s + Number(d.total_payout || 0), 0)
+  const pengeluaranManual = transaksiRows.filter((r: any) => r.jenis === 'expense').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  const totalPengeluaran = pengeluaranHonor + pengeluaranManual
+  const saldoBersih = totalPemasukan - totalPengeluaran
 
   return (
     <div className="max-w-5xl mx-auto flex flex-col gap-6 pb-10">
@@ -240,7 +296,7 @@ export default function AdminLaporanPage() {
             className="px-4 py-2 bg-dark text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-dark/80 transition-colors">
             🖨️ Print / PDF
           </button>
-          {(['kehadiran', 'prestasi', 'honor', 'ortu'] as Tab[]).includes(activeTab) && (
+          {(['keuangan', 'kehadiran', 'prestasi', 'honor', 'ortu'] as Tab[]).includes(activeTab) && (
             <button onClick={handleDownloadCSV}
               className="px-4 py-2 bg-primary text-dark rounded-2xl font-bold text-sm border-2 border-primary hover:bg-primary/80 transition-colors">
               ⬇️ Download CSV
@@ -288,27 +344,53 @@ export default function AdminLaporanPage() {
       ) : (
         <>
           {activeTab === 'keuangan' && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6">
+              {/* Summary Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="flex flex-col gap-1">
-                  <div className="text-xs font-bold text-dark/50 uppercase tracking-wide">💵 Pemasukan Iuran</div>
+                <Card className="flex flex-col gap-2 border-2 border-dark">
+                  <div className="text-xs font-bold text-dark/50 uppercase tracking-wide">💵 Total Pemasukan</div>
                   <div className="text-2xl font-bold font-sans text-green-700">{formatRupiah(totalPemasukan)}</div>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <div className="text-xs text-dark/40">{iuranRows.filter((r: any) => r.status_bayar === 'lunas').length} siswa lunas</div>
+                  <div className="border-t border-dark/10 pt-2 flex flex-col gap-1 text-xs text-dark/70">
+                    <div className="flex justify-between">
+                      <span>💰 Iuran Siswa</span>
+                      <span className="font-bold">{formatRupiah(pemasukanIuran)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>🛒 Toko Merchant</span>
+                      <span className="font-bold">{formatRupiah(pemasukanMerchant)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>✏️ Manual</span>
+                      <span className="font-bold">{formatRupiah(pemasukanManual)}</span>
+                    </div>
+                  </div>
                 </Card>
-                <Card className="flex flex-col gap-1">
-                  <div className="text-xs font-bold text-dark/50 uppercase tracking-wide">💸 Pengeluaran</div>
+
+                <Card className="flex flex-col gap-2 border-2 border-dark">
+                  <div className="text-xs font-bold text-dark/50 uppercase tracking-wide">💸 Total Pengeluaran</div>
                   <div className="text-2xl font-bold font-sans text-red-600">{formatRupiah(totalPengeluaran)}</div>
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <div className="text-xs text-dark/40">{transaksiRows.filter((r: any) => r.jenis === 'keluar').length} transaksi</div>
+                  <div className="border-t border-dark/10 pt-2 flex flex-col gap-1 text-xs text-dark/70">
+                    <div className="flex justify-between">
+                      <span>🏆 Honor Pelatih</span>
+                      <span className="font-bold">{formatRupiah(pengeluaranHonor)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>✏️ Manual</span>
+                      <span className="font-bold">{formatRupiah(pengeluaranManual)}</span>
+                    </div>
+                  </div>
                 </Card>
-                <Card className="flex flex-col gap-1">
+
+                <Card className={`flex flex-col gap-2 border-2 ${saldoBersih >= 0 ? 'bg-primary/10 border-primary' : 'bg-accent/10 border-accent'}`}>
                   <div className="text-xs font-bold text-dark/50 uppercase tracking-wide">🏦 Saldo Bersih</div>
-                  <div className={`text-2xl font-bold font-sans ${totalPemasukan - totalPengeluaran >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(totalPemasukan - totalPengeluaran)}</div>
+                  <div className={`text-2xl font-bold font-sans ${saldoBersih >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(saldoBersih)}</div>
+                  <div className="text-xs text-dark/50 mt-auto">Periode {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</div>
                 </Card>
               </div>
+
+              {/* Detail Iuran */}
               <Card>
-                <h2 className="font-bold text-dark mb-3">📋 Detail Iuran — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
+                <h2 className="font-bold text-dark mb-3 text-lg">💰 Detail Iuran Siswa — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm font-sans">
                     <thead><tr className="border-b-2 border-dark/20">
@@ -321,7 +403,7 @@ export default function AdminLaporanPage() {
                       {iuranRows.map((r: any, i: number) => (
                         <tr key={i} className="border-b border-dark/10">
                           {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                          <td className="py-2 font-bold text-dark">{(r.siswa as any)?.nama}</td>
+                          <td className="py-2 font-bold text-dark">{(r.siswa as any)?.nama || '-'}</td>
                           <td className="py-2 text-right text-dark">{formatRupiah(r.nominal)}</td>
                           <td className="py-2 text-center">
                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${r.status_bayar === 'lunas' ? 'bg-green-100 text-green-700' : r.status_bayar === 'belum_bayar' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700'}`}>
@@ -331,6 +413,72 @@ export default function AdminLaporanPage() {
                         </tr>
                       ))}
                       {iuranRows.length === 0 && <tr><td colSpan={3} className="py-8 text-center text-dark/40">Tidak ada data iuran untuk periode ini</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Detail Penjualan Toko Merchant */}
+              <Card>
+                <h2 className="font-bold text-dark mb-3 text-lg">🛒 Detail Penjualan Toko Merchant — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm font-sans">
+                    <thead><tr className="border-b-2 border-dark/20">
+                      <th className="text-left py-2 text-dark/60 font-bold">Tanggal</th>
+                      <th className="text-left py-2 text-dark/60 font-bold">Nama Pemesan / Siswa</th>
+                      <th className="text-center py-2 text-dark/60 font-bold">Status Pesanan</th>
+                      <th className="text-right py-2 text-dark/60 font-bold">Total Belanja</th>
+                    </tr></thead>
+                    <tbody>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {merchantRows.map((m: any, i: number) => (
+                        <tr key={i} className="border-b border-dark/10">
+                          <td className="py-2 text-dark/70 text-xs">{new Date(m.created_at).toLocaleDateString('id-ID')}</td>
+                          <td className="py-2 font-bold text-dark">{(m.siswa as any)?.nama || '-'}</td>
+                          <td className="py-2 text-center">
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 uppercase">
+                              ✅ {m.status}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right font-bold text-green-700">{formatRupiah(m.total_harga)}</td>
+                        </tr>
+                      ))}
+                      {merchantRows.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-dark/40">Tidak ada pesanan toko yang lunas pada periode ini</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Detail Transaksi Kas Manual */}
+              <Card>
+                <h2 className="font-bold text-dark mb-3 text-lg">✏️ Detail Transaksi Kas Manual — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm font-sans">
+                    <thead><tr className="border-b-2 border-dark/20">
+                      <th className="text-left py-2 text-dark/60 font-bold">Tanggal</th>
+                      <th className="text-left py-2 text-dark/60 font-bold">Jenis</th>
+                      <th className="text-left py-2 text-dark/60 font-bold">Kategori</th>
+                      <th className="text-left py-2 text-dark/60 font-bold">Keterangan</th>
+                      <th className="text-right py-2 text-dark/60 font-bold">Nominal</th>
+                    </tr></thead>
+                    <tbody>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {transaksiRows.map((t: any, i: number) => (
+                        <tr key={i} className="border-b border-dark/10">
+                          <td className="py-2 text-dark/70 text-xs">{t.tgl}</td>
+                          <td className="py-2">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${t.jenis === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                              {t.jenis === 'income' ? '💵 Income' : '💸 Expense'}
+                            </span>
+                          </td>
+                          <td className="py-2 text-dark/80 text-xs font-bold">{t.kategori}</td>
+                          <td className="py-2 text-dark">{t.keterangan}</td>
+                          <td className={`py-2 text-right font-bold ${t.jenis === 'income' ? 'text-green-700' : 'text-red-600'}`}>
+                            {t.jenis === 'income' ? '+' : '-'}{formatRupiah(t.nominal)}
+                          </td>
+                        </tr>
+                      ))}
+                      {transaksiRows.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-dark/40">Tidak ada transaksi kas manual pada periode ini</td></tr>}
                     </tbody>
                   </table>
                 </div>
