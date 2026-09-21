@@ -13,7 +13,7 @@ const SABUK_OPTIONS = ['Putih', 'Kuning', 'Kuning Strip', 'Hijau', 'Hijau Strip'
 
 export default function SiswaAdminPage() {
   const [siswaList, setSiswaList] = useState<Siswa[]>([])
-  const [programList, setProgramList] = useState<{id: string, nama_program: string}[]>([])
+  const [programList, setProgramList] = useState<{id: string, nama_program: string, biaya_bulanan: number}[]>([])
   const [loading, setLoading] = useState(true)
 
   // Form State
@@ -39,7 +39,7 @@ export default function SiswaAdminPage() {
     // Fetch Siswa
     const { data: sData } = await supabase
       .from('siswa')
-      .select('*, program_kelas(nama_program)')
+      .select('*, program_kelas(nama_program, biaya_bulanan)')
       .order('nama', { ascending: true })
     
     if (sData) setSiswaList(sData as Siswa[])
@@ -47,7 +47,7 @@ export default function SiswaAdminPage() {
     // Fetch Program Kelas
     const { data: pData } = await supabase
       .from('program_kelas')
-      .select('id, nama_program')
+      .select('id, nama_program, biaya_bulanan')
       .eq('status_aktif', true)
     
     if (pData) setProgramList(pData)
@@ -118,6 +118,18 @@ export default function SiswaAdminPage() {
         .update(payload)
         .eq('id', editingId)
       error = updateError
+
+      // Update otomatis nominal tagihan iuran yang belum bayar jika program kelas diperbarui
+      if (!error && payload.program_kelas_id) {
+        const prog = programList.find(p => p.id === payload.program_kelas_id)
+        if (prog && typeof prog.biaya_bulanan === 'number') {
+          await supabase
+            .from('iuran')
+            .update({ nominal: prog.biaya_bulanan })
+            .eq('siswa_id', editingId)
+            .in('status_bayar', ['belum_bayar', 'ditolak'])
+        }
+      }
     } else {
       const { error: insertError } = await supabase
         .from('siswa')

@@ -36,6 +36,7 @@ export interface Siswa {
   created_at: string
   program_kelas?: {
     nama_program: string
+    biaya_bulanan?: number
   }
 }
 
@@ -106,7 +107,12 @@ export interface Iuran {
   bukti_transfer_url: string | null
   catatan: string | null
   created_at: string
-  siswa?: Pick<Siswa, 'nama' | 'program_kelas_id'>
+  siswa?: Pick<Siswa, 'nama' | 'program_kelas_id'> & {
+    program_kelas?: {
+      nama_program: string
+      biaya_bulanan?: number
+    }
+  }
 }
 
 export interface KartuAnggota {

@@ -10,7 +10,17 @@ import { Input } from '@/components/ui/Input'
 import type { Iuran } from '@/lib/types'
 
 type StatusBayar = 'belum_bayar' | 'menunggu_verifikasi' | 'lunas' | 'ditolak'
-type IuranWithSiswa = Iuran & { siswa: { nama: string } }
+type IuranWithSiswa = Iuran & {
+  siswa: {
+    id: string
+    nama: string
+    program_kelas_id?: string
+    program_kelas?: {
+      nama_program: string
+      biaya_bulanan: number
+    }
+  }
+}
 
 const STATUS_CONFIG: Record<StatusBayar, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark'; icon: string }> = {
   belum_bayar:          { label: 'Belum Bayar',    color: 'accent',    icon: '⏳' },
@@ -39,11 +49,21 @@ export default function AdminIuranPage() {
   const [buktiUrl, setBuktiUrl] = useState<Record<string, string>>({})
   const [catatan, setCatatan] = useState<Record<string, string>>({})
 
+  // Edit nominal state
+  const [editingNominalId, setEditingNominalId] = useState<string | null>(null)
+  const [editingNominalVal, setEditingNominalVal] = useState<string>('')
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 4000)
+  }
+
   const fetchIuran = useCallback(async () => {
     setLoading(true)
     let query = supabase
       .from('iuran')
-      .select('*, siswa:siswa_id(nama)')
+      .select('*, siswa:siswa_id(id, nama, program_kelas_id, program_kelas:program_kelas_id(nama_program, biaya_bulanan))')
       .eq('bulan', parseInt(filterBulan))
       .eq('tahun', parseInt(filterTahun))
       .order('created_at', { ascending: false })
@@ -53,7 +73,7 @@ export default function AdminIuranPage() {
     }
 
     const { data } = await query
-    setIuranList((data || []) as IuranWithSiswa[])
+    setIuranList((data || []) as unknown as IuranWithSiswa[])
     setLoading(false)
   }, [filterBulan, filterTahun, filterStatus])
 
@@ -101,6 +121,60 @@ export default function AdminIuranPage() {
     setActionLoading(null)
   }
 
+  const handleSyncSingleNominal = async (id: string, newNominal: number) => {
+    setActionLoading(id)
+    const { error } = await supabase.from('iuran').update({ nominal: newNominal }).eq('id', id)
+    if (error) {
+      alert('Gagal menyesuaikan nominal: ' + error.message)
+    } else {
+      showToast(`✅ Nominal tagihan berhasil disesuaikan ke ${formatRupiah(newNominal)}`)
+      await fetchIuran()
+    }
+    setActionLoading(null)
+  }
+
+  const handleSaveCustomNominal = async (id: string) => {
+    const num = parseInt(editingNominalVal.replace(/\D/g, ''))
+    if (isNaN(num) || num < 0) {
+      alert('Masukkan nominal yang valid')
+      return
+    }
+    setActionLoading(id)
+    const { error } = await supabase.from('iuran').update({ nominal: num }).eq('id', id)
+    if (error) {
+      alert('Gagal mengubah nominal: ' + error.message)
+    } else {
+      showToast(`✅ Nominal tagihan berhasil diperbarui ke ${formatRupiah(num)}`)
+      setEditingNominalId(null)
+      await fetchIuran()
+    }
+    setActionLoading(null)
+  }
+
+  // Mismatched items (unpaid bills where nominal doesn't match active program tariff)
+  const mismatchedItems = iuranList.filter(i => {
+    if (i.status_bayar === 'lunas') return false
+    const expected = Number(i.siswa?.program_kelas?.biaya_bulanan || 0)
+    return expected > 0 && Number(i.nominal) !== expected
+  })
+
+  const handleSyncAllMismatched = async () => {
+    if (mismatchedItems.length === 0) return
+    setActionLoading('sync-all')
+    try {
+      for (const item of mismatchedItems) {
+        const expected = Number(item.siswa?.program_kelas?.biaya_bulanan || 100000)
+        await supabase.from('iuran').update({ nominal: expected }).eq('id', item.id)
+      }
+      showToast(`✅ Berhasil menyinkronkan ${mismatchedItems.length} tagihan dengan tarif kelas saat ini!`)
+      await fetchIuran()
+    } catch (err: any) {
+      alert('Gagal menyinkronkan: ' + err.message)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   // Summary stats
   const totalTagihan = iuranList.length
   const totalLunas = iuranList.filter(i => i.status_bayar === 'lunas').length
@@ -109,16 +183,57 @@ export default function AdminIuranPage() {
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-8">
+      {/* Toast Alert */}
+      {toastMsg && (
+        <div className="fixed top-5 right-5 z-50 p-4 bg-primary text-dark font-bold font-sans rounded-2xl border-2 border-dark shadow-brutal animate-bounce">
+          {toastMsg}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold font-sans text-dark">Kelola Iuran</h1>
           <p className="text-dark/60 font-sans mt-1">Pantau dan verifikasi pembayaran iuran bulanan</p>
         </div>
-        <a href="/admin/iuran/generate">
-          <Button variant="primary">⚡ Generate Tagihan</Button>
-        </a>
+        <div className="flex gap-2 flex-wrap">
+          {mismatchedItems.length > 0 && (
+            <Button
+              variant="accent"
+              onClick={handleSyncAllMismatched}
+              disabled={actionLoading === 'sync-all' || loading}
+              className="text-sm font-bold animate-pulse"
+            >
+              {actionLoading === 'sync-all' ? '⏳ Menyinkronkan...' : `🔄 Sinkronkan ${mismatchedItems.length} Tarif Beda`}
+            </Button>
+          )}
+          <a href="/admin/iuran/generate">
+            <Button variant="primary">⚡ Generate Tagihan</Button>
+          </a>
+        </div>
       </div>
+
+      {/* Warning banner jika ada perbedaan tarif kelas */}
+      {mismatchedItems.length > 0 && (
+        <div className="p-4 bg-accent/15 border-2 border-accent rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-dark">
+          <div>
+            <p className="font-bold font-sans text-sm text-accent">
+              ⚠️ Terdeteksi {mismatchedItems.length} Tagihan Belum Sesuai dengan Kelas Siswa
+            </p>
+            <p className="text-xs text-dark/70 font-sans mt-0.5">
+              Siswa mungkin berpindah kelas dari Umum ke Prestasi (atau sebaliknya) setelah tagihan dibuat. Klik tombol untuk menyesuaikan otomatis.
+            </p>
+          </div>
+          <Button
+            variant="accent"
+            onClick={handleSyncAllMismatched}
+            disabled={actionLoading === 'sync-all'}
+            className="text-xs py-2 px-3 whitespace-nowrap"
+          >
+            🔄 Sinkronkan Sekarang
+          </Button>
+        </div>
+      )}
 
       {/* Filter */}
       <Card>
@@ -180,19 +295,87 @@ export default function AdminIuranPage() {
             const cfg = STATUS_CONFIG[iuran.status_bayar]
             const isLoading = actionLoading === iuran.id
             const buktiPath = iuran.bukti_transfer_url
+            const programName = iuran.siswa?.program_kelas?.nama_program || 'Umum'
+            const expectedNominal = Number(iuran.siswa?.program_kelas?.biaya_bulanan || 100000)
+            const isNominalMismatch = iuran.status_bayar !== 'lunas' && Number(iuran.nominal) !== expectedNominal
+
             return (
-              <Card key={iuran.id} className="flex flex-col gap-4">
+              <Card key={iuran.id} className={`flex flex-col gap-4 ${isNominalMismatch ? 'border-2 border-accent/80' : ''}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-bold font-sans text-dark text-lg">{iuran.siswa?.nama || '-'}</h3>
+                      <Badge color="dark">{programName}</Badge>
                       <Badge color={cfg.color}>{cfg.icon} {cfg.label}</Badge>
                     </div>
-                    <p className="text-sm text-dark/60 font-sans mt-1">
-                      {BULAN_NAMES[iuran.bulan]} {iuran.tahun} · {formatRupiah(iuran.nominal)}
-                      {iuran.tgl_bayar && ` · Dibayar ${new Date(iuran.tgl_bayar).toLocaleDateString('id-ID')}`}
-                      {iuran.metode && ` (${iuran.metode})`}
-                    </p>
+
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      {editingNominalId === iuran.id ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-sm font-bold text-dark font-sans">Rp</span>
+                          <input
+                            type="number"
+                            value={editingNominalVal}
+                            onChange={e => setEditingNominalVal(e.target.value)}
+                            className="border-2 border-dark rounded-xl px-3 py-1 text-sm font-sans w-32 focus:outline-none focus:ring-2 focus:ring-primary"
+                            placeholder="Nominal"
+                            autoFocus
+                          />
+                          <Button
+                            variant="primary"
+                            onClick={() => handleSaveCustomNominal(iuran.id)}
+                            disabled={isLoading}
+                            className="text-xs py-1 px-2.5"
+                          >
+                            Simpan
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            onClick={() => setEditingNominalId(null)}
+                            className="text-xs py-1 px-2.5"
+                          >
+                            Batal
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm text-dark/70 font-sans">
+                            {BULAN_NAMES[iuran.bulan]} {iuran.tahun} · <strong className="text-dark font-mono text-base">{formatRupiah(iuran.nominal)}</strong>
+                            {iuran.tgl_bayar && ` · Dibayar ${new Date(iuran.tgl_bayar).toLocaleDateString('id-ID')}`}
+                            {iuran.metode && ` (${iuran.metode})`}
+                          </p>
+                          {iuran.status_bayar !== 'lunas' && (
+                            <button
+                              onClick={() => {
+                                setEditingNominalId(iuran.id)
+                                setEditingNominalVal(String(iuran.nominal))
+                              }}
+                              className="text-xs text-dark/50 hover:text-dark font-sans underline"
+                              title="Ubah nominal tagihan ini secara manual"
+                            >
+                              ✏️ Edit
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {isNominalMismatch && (
+                      <div className="mt-2 p-2 bg-accent/10 border border-accent rounded-xl flex items-center justify-between flex-wrap gap-2">
+                        <span className="text-xs text-accent font-bold font-sans">
+                          ⚠️ Tarif tagihan ({formatRupiah(iuran.nominal)}) ≠ Kelas saat ini ({programName}: {formatRupiah(expectedNominal)})
+                        </span>
+                        <Button
+                          variant="accent"
+                          onClick={() => handleSyncSingleNominal(iuran.id, expectedNominal)}
+                          disabled={isLoading}
+                          className="text-xs py-1 px-2.5"
+                        >
+                          {isLoading ? '⏳' : `⚡ Sesuaikan ke ${formatRupiah(expectedNominal)}`}
+                        </Button>
+                      </div>
+                    )}
+
                     {iuran.catatan && (
                       <p className="text-sm text-accent font-sans mt-1">📝 {iuran.catatan}</p>
                     )}
@@ -246,3 +429,4 @@ export default function AdminIuranPage() {
     </div>
   )
 }
+
