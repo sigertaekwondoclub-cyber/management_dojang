@@ -45,12 +45,16 @@ export default function OrtuLaporanPage() {
   const fetchData = useCallback(async () => {
     if (!siswaId) return
     setLoading(true)
+    const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
+    const lastDay = new Date(tah, bul, 0).getDate()
+    const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
+
     const { data: absensiRows } = await supabase
       .from('absensi_siswa').select('status_hadir')
       .eq('siswa_id', siswaId)
       .gte('tgl', `${tah}-${filterBulan}-01`)
-      .lte('tgl', `${tah}-${filterBulan}-31`)
+      .lte('tgl', endTgl)
     const rows = absensiRows || []
     const hadir = rows.filter(r => r.status_hadir === 'hadir').length
     const izin = rows.filter(r => r.status_hadir === 'izin').length

@@ -3,6 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 
 const supabase = createClient()
 
@@ -13,12 +16,34 @@ function formatRupiah(n: number) {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 }
 
-type Tab = 'keuangan' | 'kehadiran' | 'honor' | 'anggota' | 'prestasi' | 'ortu'
+type Tab = 'keuangan' | 'kehadiran' | 'tagihan_ortu' | 'honor' | 'anggota' | 'prestasi'
 
-interface SiswaRekap {
+interface AbsensiRecord {
+  id: string
+  tgl: string
+  kelas: string
+  status_hadir: 'hadir' | 'izin' | 'sakit' | 'alpha'
+  pelatih_nama?: string
+}
+
+interface KehadiranSiswaRekap {
+  siswaId: string
+  nama: string
+  programKelas: string
+  hadir: number
+  izin: number
+  sakit: number
+  alpha: number
+  totalSesi: number
+  persen: number
+  riwayat: AbsensiRecord[]
+}
+
+interface SiswaRekapTagihan {
   id: string
   nama: string
   no_hp_ortu: string
+  programKelas: string
   hadir: number
   izin: number
   sakit: number
@@ -27,6 +52,16 @@ interface SiswaRekap {
   persen: number
   statusIuran: string
   nominalIuran: number
+  iuranId?: string
+  riwayat: AbsensiRecord[]
+}
+
+interface ClubSettings {
+  nama_club: string | null
+  rekening_bank: string | null
+  rekening_nomor: string | null
+  rekening_atas_nama: string | null
+  kontak_wa: string | null
 }
 
 export default function AdminLaporanPage() {
@@ -36,26 +71,65 @@ export default function AdminLaporanPage() {
   const [filterTahun, setFilterTahun] = useState(String(now.getFullYear()))
   const [loading, setLoading] = useState(false)
 
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [tagihanStatusFilter, setTagihanStatusFilter] = useState<'semua' | 'belum_bayar' | 'menunggu_verifikasi' | 'lunas'>('belum_bayar')
+  const [kelasFilter, setKelasFilter] = useState<string>('semua')
+
+  // Selected student for detail absensi modal
+  const [selectedSiswaDetail, setSelectedSiswaDetail] = useState<{
+    nama: string
+    programKelas: string
+    hadir: number
+    izin: number
+    sakit: number
+    alpha: number
+    totalSesi: number
+    persen: number
+    riwayat: AbsensiRecord[]
+  } | null>(null)
+
+  // Toast feedback state
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const showToast = (msg: string) => {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 3500)
+  }
+
+  // Data states
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [keuanganData, setKeuanganData] = useState<any[]>([])
-  const [kehadiranData, setKehadiranData] = useState<{ nama: string; hadir: number; izin: number; sakit: number; alpha: number }[]>([])
+  const [kehadiranData, setKehadiranData] = useState<KehadiranSiswaRekap[]>([])
+  const [tagihanData, setTagihanData] = useState<SiswaRekapTagihan[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [honorData, setHonorData] = useState<any[]>([])
   const [anggotaData, setAnggotaData] = useState<{ aktif: number; baru: number; nonaktif: number; list: { id: string; nama: string; tgl_gabung: string; status_aktif: boolean }[] }>({ aktif: 0, baru: 0, nonaktif: 0, list: [] })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [prestasiData, setPrestasiData] = useState<any[]>([])
-  const [ortuData, setOrtuData] = useState<SiswaRekap[]>([])
+  const [clubSettings, setClubSettings] = useState<ClubSettings | null>(null)
 
+  // Fetch Pengaturan Club
+  const fetchSettings = useCallback(async () => {
+    const { data } = await supabase.from('pengaturan_club').select('*').limit(1).maybeSingle()
+    if (data) setClubSettings(data)
+  }, [])
+
+  useEffect(() => {
+    fetchSettings()
+  }, [fetchSettings])
+
+  // 1. Fetch Keuangan
   const fetchKeuangan = useCallback(async () => {
     const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
     const startTgl = `${tah}-${filterBulan}-01`
-    const endTgl = new Date(tah, bul, 0).toISOString().split('T')[0]
+    const lastDay = new Date(tah, bul, 0).getDate()
+    const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
 
     const [iuranRes, merchantRes, manualRes, honorRes] = await Promise.all([
       supabase
         .from('iuran')
-        .select('nominal, status_bayar, siswa:siswa_id(nama)')
+        .select('nominal, status_bayar, siswa:siswa_id(nama, program_kelas:program_kelas_id(nama_program))')
         .eq('bulan', bul).eq('tahun', tah),
       supabase
         .from('pesanan_merchant')
@@ -86,23 +160,162 @@ export default function AdminLaporanPage() {
     }])
   }, [filterBulan, filterTahun])
 
+  // 2. Fetch Kehadiran (Fixing date range bug + including session details)
   const fetchKehadiran = useCallback(async () => {
+    const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
-    const { data } = await supabase
+    const lastDay = new Date(tah, bul, 0).getDate()
+    const startTgl = `${tah}-${filterBulan}-01`
+    const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
+
+    // Ambil siswa aktif
+    const { data: siswaList } = await supabase
+      .from('siswa')
+      .select('id, nama, program_kelas:program_kelas_id(nama_program)')
+      .eq('status_aktif', true)
+      .order('nama')
+
+    // Ambil absensi siswa di periode terpilih
+    const { data: absensiRows } = await supabase
       .from('absensi_siswa')
-      .select('siswa_id, status_hadir, siswa:siswa_id(nama)')
-      .gte('tgl', `${tah}-${filterBulan}-01`)
-      .lte('tgl', `${tah}-${filterBulan}-31`)
-    const grouped: Record<string, { nama: string; hadir: number; izin: number; sakit: number; alpha: number }> = {}
-    for (const row of (data || [])) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const nama = (row.siswa as any)?.nama || 'Unknown'
-      if (!grouped[row.siswa_id]) grouped[row.siswa_id] = { nama, hadir: 0, izin: 0, sakit: 0, alpha: 0 }
-      grouped[row.siswa_id][row.status_hadir as 'hadir' | 'izin' | 'sakit' | 'alpha']++
+      .select('id, tgl, kelas, status_hadir, siswa_id, pelatih:pelatih_id_pengajar(nama)')
+      .gte('tgl', startTgl)
+      .lte('tgl', endTgl)
+      .order('tgl', { ascending: true })
+
+    const rows = absensiRows || []
+    const grouped: Record<string, KehadiranSiswaRekap> = {}
+
+    // Inisialisasi data untuk semua siswa aktif
+    for (const s of (siswaList || [])) {
+      grouped[s.id] = {
+        siswaId: s.id,
+        nama: s.nama,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        programKelas: (s.program_kelas as any)?.nama_program || 'Umum',
+        hadir: 0,
+        izin: 0,
+        sakit: 0,
+        alpha: 0,
+        totalSesi: 0,
+        persen: 0,
+        riwayat: []
+      }
     }
-    setKehadiranData(Object.values(grouped).sort((a, b) => b.hadir - a.hadir))
+
+    // Masukkan riwayat absensi
+    for (const r of rows) {
+      if (!grouped[r.siswa_id]) {
+        // Jika ada siswa di absensi yang tidak ada di daftar aktif
+        grouped[r.siswa_id] = {
+          siswaId: r.siswa_id,
+          nama: 'Siswa Nonaktif',
+          programKelas: 'Umum',
+          hadir: 0,
+          izin: 0,
+          sakit: 0,
+          alpha: 0,
+          totalSesi: 0,
+          persen: 0,
+          riwayat: []
+        }
+      }
+
+      const item = grouped[r.siswa_id]
+      const status = r.status_hadir as 'hadir' | 'izin' | 'sakit' | 'alpha'
+      if (item[status] !== undefined) {
+        item[status]++
+      }
+      item.totalSesi++
+      item.riwayat.push({
+        id: r.id,
+        tgl: r.tgl,
+        kelas: r.kelas,
+        status_hadir: status,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pelatih_nama: (r.pelatih as any)?.nama || 'Pelatih'
+      })
+    }
+
+    // Hitung persentase
+    const result = Object.values(grouped).map(item => ({
+      ...item,
+      persen: item.totalSesi > 0 ? Math.round((item.hadir / item.totalSesi) * 100) : 0
+    }))
+
+    // Sort by hadir terbanyak lalu nama
+    setKehadiranData(result.sort((a, b) => b.hadir - a.hadir || a.nama.localeCompare(b.nama)))
   }, [filterBulan, filterTahun])
 
+  // 3. Fetch Tagihan & Ortu
+  const fetchTagihan = useCallback(async () => {
+    const bul = parseInt(filterBulan)
+    const tah = parseInt(filterTahun)
+    const lastDay = new Date(tah, bul, 0).getDate()
+    const startTgl = `${tah}-${filterBulan}-01`
+    const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
+
+    const [siswaRes, absensiRes, iuranRes] = await Promise.all([
+      supabase
+        .from('siswa')
+        .select('id, nama, no_hp_ortu, program_kelas_id, program_kelas:program_kelas_id(nama_program, biaya_bulanan)')
+        .eq('status_aktif', true)
+        .order('nama'),
+      supabase
+        .from('absensi_siswa')
+        .select('id, tgl, kelas, status_hadir, siswa_id, pelatih:pelatih_id_pengajar(nama)')
+        .gte('tgl', startTgl)
+        .lte('tgl', endTgl)
+        .order('tgl', { ascending: true }),
+      supabase
+        .from('iuran')
+        .select('id, siswa_id, status_bayar, nominal')
+        .eq('bulan', bul)
+        .eq('tahun', tah),
+    ])
+
+    const siswaList = siswaRes.data || []
+    const absensiRows = absensiRes.data || []
+    const iuranRows = iuranRes.data || []
+
+    const merged: SiswaRekapTagihan[] = siswaList.map(s => {
+      const abs = absensiRows.filter(a => a.siswa_id === s.id)
+      const iuran = iuranRows.find(i => i.siswa_id === s.id)
+      const hadir = abs.filter(a => a.status_hadir === 'hadir').length
+      const total = abs.length
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prog = s.program_kelas as any
+      const defaultBiaya = prog?.biaya_bulanan || 100000
+
+      return {
+        id: s.id,
+        nama: s.nama,
+        no_hp_ortu: s.no_hp_ortu || '',
+        programKelas: prog?.nama_program || 'Umum',
+        hadir,
+        izin: abs.filter(a => a.status_hadir === 'izin').length,
+        sakit: abs.filter(a => a.status_hadir === 'sakit').length,
+        alpha: abs.filter(a => a.status_hadir === 'alpha').length,
+        totalSesi: total,
+        persen: total > 0 ? Math.round((hadir / total) * 100) : 0,
+        statusIuran: iuran?.status_bayar || 'belum_bayar',
+        nominalIuran: iuran ? Number(iuran.nominal) : defaultBiaya,
+        iuranId: iuran?.id,
+        riwayat: abs.map(a => ({
+          id: a.id,
+          tgl: a.tgl,
+          kelas: a.kelas,
+          status_hadir: a.status_hadir as 'hadir' | 'izin' | 'sakit' | 'alpha',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          pelatih_nama: (a.pelatih as any)?.nama || 'Pelatih'
+        }))
+      }
+    })
+
+    setTagihanData(merged)
+  }, [filterBulan, filterTahun])
+
+  // 4. Fetch Honor
   const fetchHonor = useCallback(async () => {
     const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
@@ -115,6 +328,7 @@ export default function AdminLaporanPage() {
     setHonorData(runData ? [runData as any] : [])
   }, [filterBulan, filterTahun])
 
+  // 5. Fetch Anggota
   const fetchAnggota = useCallback(async () => {
     const tah = parseInt(filterTahun)
     const { data: all } = await supabase.from('siswa').select('id, nama, tgl_gabung, status_aktif')
@@ -125,6 +339,7 @@ export default function AdminLaporanPage() {
     setAnggotaData({ aktif: aktif.length, baru: baru.length, nonaktif: nonaktif.length, list: rows })
   }, [filterTahun])
 
+  // 6. Fetch Prestasi
   const fetchPrestasi = useCallback(async () => {
     const { data } = await supabase
       .from('prestasi')
@@ -133,55 +348,24 @@ export default function AdminLaporanPage() {
     setPrestasiData(data || [])
   }, [])
 
-  const fetchOrtu = useCallback(async () => {
-    const bul = parseInt(filterBulan)
-    const tah = parseInt(filterTahun)
-    const { data: siswaList } = await supabase
-      .from('siswa')
-      .select('id, nama, no_hp_ortu')
-      .eq('status_aktif', true)
-      .order('nama')
-    if (!siswaList) return
-    const siswaIds = siswaList.map(s => s.id)
-    const { data: absensiRows } = await supabase
-      .from('absensi_siswa')
-      .select('siswa_id, status_hadir')
-      .in('siswa_id', siswaIds)
-      .gte('tgl', `${tah}-${filterBulan}-01`)
-      .lte('tgl', `${tah}-${filterBulan}-31`)
-    const { data: iuranRows } = await supabase
-      .from('iuran')
-      .select('siswa_id, status_bayar, nominal')
-      .in('siswa_id', siswaIds)
-      .eq('bulan', bul).eq('tahun', tah)
-    const merged: SiswaRekap[] = siswaList.map(s => {
-      const abs = (absensiRows || []).filter(a => a.siswa_id === s.id)
-      const iuran = (iuranRows || []).find(i => i.siswa_id === s.id)
-      const hadir = abs.filter(a => a.status_hadir === 'hadir').length
-      const total = abs.length
-      return {
-        ...s,
-        hadir,
-        izin: abs.filter(a => a.status_hadir === 'izin').length,
-        sakit: abs.filter(a => a.status_hadir === 'sakit').length,
-        alpha: abs.filter(a => a.status_hadir === 'alpha').length,
-        totalSesi: total,
-        persen: total > 0 ? Math.round((hadir / total) * 100) : 0,
-        statusIuran: iuran?.status_bayar || 'belum_bayar',
-        nominalIuran: iuran?.nominal || 0,
-      }
-    })
-    setOrtuData(merged)
-  }, [filterBulan, filterTahun])
-
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    await Promise.all([fetchKeuangan(), fetchKehadiran(), fetchHonor(), fetchAnggota(), fetchPrestasi(), fetchOrtu()])
+    await Promise.all([
+      fetchKeuangan(),
+      fetchKehadiran(),
+      fetchTagihan(),
+      fetchHonor(),
+      fetchAnggota(),
+      fetchPrestasi()
+    ])
     setLoading(false)
-  }, [fetchKeuangan, fetchKehadiran, fetchHonor, fetchAnggota, fetchPrestasi, fetchOrtu])
+  }, [fetchKeuangan, fetchKehadiran, fetchTagihan, fetchHonor, fetchAnggota, fetchPrestasi])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  useEffect(() => {
+    fetchAll()
+  }, [fetchAll])
 
+  // CSV Download Utility
   const downloadCSV = (filename: string, rows: (string | number)[][], headers: string[]) => {
     const content = [headers, ...rows]
       .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
@@ -197,35 +381,36 @@ export default function AdminLaporanPage() {
     const bul = BULAN_NAMES[parseInt(filterBulan)]
     if (activeTab === 'keuangan') {
       const rows: (string | number)[][] = []
-      // 1. Iuran lunas
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       iuranRows.filter((r: any) => r.status_bayar === 'lunas').forEach((r: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rows.push(['Pemasukan', 'Iuran Bulanan', `Iuran ${(r.siswa as any)?.nama || 'Siswa'}`, r.nominal])
       })
-      // 2. Merchant lunas
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       merchantRows.forEach((r: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rows.push(['Pemasukan', 'Penjualan Merchant', `Pesanan Merchant — ${(r.siswa as any)?.nama || 'Siswa'}`, r.total_harga])
       })
-      // 3. Transaksi manual
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       transaksiRows.forEach((r: any) => {
         rows.push([r.jenis === 'income' ? 'Pemasukan' : 'Pengeluaran', r.kategori, r.keterangan, r.nominal])
       })
-      // 4. Honor pelatih
       const pr = keuanganData[0]?.payrollRun
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
         rows.push(['Pengeluaran', 'Honor Pelatih', `Honor ${d.pelatih?.nama || 'Pelatih'}`, d.total_payout])
       })
 
-      downloadCSV(`laporan-keuangan-${bul}-${filterTahun}.csv`,
-        rows,
-        ['Jenis', 'Kategori', 'Keterangan', 'Nominal (Rp)']
-      )
+      downloadCSV(`laporan-keuangan-${bul}-${filterTahun}.csv`, rows, ['Jenis', 'Kategori', 'Keterangan', 'Nominal (Rp)'])
     } else if (activeTab === 'kehadiran') {
-      downloadCSV(`kehadiran-${bul}-${filterTahun}.csv`,
-        kehadiranData.map(s => {
-          const total = s.hadir + s.izin + s.sakit + s.alpha
-          return [s.nama, s.hadir, s.izin, s.sakit, s.alpha, total, total > 0 ? `${Math.round(s.hadir / total * 100)}%` : '0%']
-        }),
-        ['Nama Siswa', 'Hadir', 'Izin', 'Sakit', 'Alpha', 'Total Sesi', '% Kehadiran']
+      downloadCSV(`rekap-kehadiran-${bul}-${filterTahun}.csv`,
+        kehadiranData.map(s => [s.nama, s.programKelas, s.hadir, s.izin, s.sakit, s.alpha, s.totalSesi, `${s.persen}%`]),
+        ['Nama Siswa', 'Program Kelas', 'Hadir', 'Izin', 'Sakit', 'Alpha', 'Total Sesi', '% Kehadiran']
+      )
+    } else if (activeTab === 'tagihan_ortu') {
+      downloadCSV(`tagihan-iuran-${bul}-${filterTahun}.csv`,
+        filteredTagihan.map(s => [s.nama, s.programKelas, s.no_hp_ortu, s.nominalIuran, s.statusIuran, s.hadir, s.totalSesi, `${s.persen}%`]),
+        ['Nama Siswa', 'Program Kelas', 'No HP Ortu', 'Nominal Iuran', 'Status Bayar', 'Hadir (Sesi)', 'Total Sesi', '% Kehadiran']
       )
     } else if (activeTab === 'prestasi') {
       downloadCSV(`prestasi-${filterTahun}.csv`,
@@ -241,108 +426,548 @@ export default function AdminLaporanPage() {
         (run.payroll_details || []).map((d: any) => [d.pelatih?.nama || '', d.pelatih?.role || '', d.teaching_honor || 0, d.founder_margin_share || 0, d.total_payout || 0, d.sudah_dibayar ? 'Sudah Dibayar' : 'Belum']),
         ['Nama Pelatih', 'Role', 'Honor Mengajar', 'Founder Share', 'Total Payout', 'Status']
       )
-    } else if (activeTab === 'ortu') {
-      downloadCSV(`rekap-ortu-${bul}-${filterTahun}.csv`,
-        ortuData.map(s => [s.nama, s.no_hp_ortu, s.hadir, s.izin, s.sakit, s.alpha, `${s.persen}%`, s.statusIuran, s.nominalIuran]),
-        ['Nama Siswa', 'No HP Ortu', 'Hadir', 'Izin', 'Sakit', 'Alpha', '% Kehadiran', 'Status Iuran', 'Nominal (Rp)']
-      )
     }
   }
 
-  const bukaWA = (siswa: SiswaRekap) => {
+  // Formatting WhatsApp Message for Billing Reminder
+  const generatePesanTagihan = (siswa: SiswaRekapTagihan): string => {
     const bul = BULAN_NAMES[parseInt(filterBulan)]
+    const clubName = clubSettings?.nama_club || 'Siger Taekwondo Club'
+    const bank = clubSettings?.rekening_bank || 'BCA / BRI / Mandiri'
+    const noRek = clubSettings?.rekening_nomor || '-'
+    const an = clubSettings?.rekening_atas_nama || clubName
+
+    return `🥋 *PEMBERITAHUAN TAGIHAN IURAN BULANAN*\n*${clubName.toUpperCase()}*\n\n` +
+      `Kepada Yth. Orang Tua / Wali Siswa\n` +
+      `👤 *Nama Siswa*: ${siswa.nama}\n` +
+      `🥋 *Program*: Kelas ${siswa.programKelas}\n` +
+      `📅 *Periode Tagihan*: ${bul} ${filterTahun}\n` +
+      `💰 *Jumlah Tagihan*: *${formatRupiah(siswa.nominalIuran)}*\n` +
+      `📌 *Status*: ⏳ Belum Lunas\n\n` +
+      `📊 *Kehadiran Latihan (${bul} ${filterTahun})*:\n` +
+      `• Hadir: ${siswa.hadir}x dari ${siswa.totalSesi} sesi (${siswa.persen}%)\n` +
+      `• Izin: ${siswa.izin}x | Sakit: ${siswa.sakit}x | Alpha: ${siswa.alpha}x\n\n` +
+      `💳 *Rekening Pembayaran*:\n` +
+      `• Bank: ${bank}\n` +
+      `• No. Rekening: *${noRek}*\n` +
+      `• Atas Nama: ${an}\n\n` +
+      `_Mohon untuk melakukan konfirmasi & upload bukti transfer melalui portal wali murid atau kirimkan balasan ke pesan ini setelah melakukan pembayaran._\n\n` +
+      `Terima kasih atas kerja sama dan dukungannya. 🙏🥋`
+  }
+
+  // Formatting WhatsApp Message for Full Report
+  const generatePesanRekapLengkap = (siswa: SiswaRekapTagihan): string => {
+    const bul = BULAN_NAMES[parseInt(filterBulan)]
+    const clubName = clubSettings?.nama_club || 'Siger Taekwondo Club'
     const statusLabel: Record<string, string> = {
-      lunas: '✅ LUNAS', belum_bayar: '❌ BELUM BAYAR',
-      menunggu_verifikasi: '🔍 MENUNGGU VERIFIKASI', ditolak: '❌ DITOLAK'
+      lunas: '✅ LUNAS',
+      belum_bayar: '⏳ BELUM DIBAYAR',
+      menunggu_verifikasi: '🔍 MENUNGGU VERIFIKASI ADMIN',
+      ditolak: '❌ DITOLAK (Silakan Upload Ulang)'
     }
-    const teks = `📊 *REKAP SIGER TAEKWONDO*\n👤 *${siswa.nama}*\n📅 Periode: ${bul} ${filterTahun}\n\n✅ *KEHADIRAN LATIHAN*\n• Hadir: ${siswa.hadir}x dari ${siswa.totalSesi} sesi${siswa.totalSesi > 0 ? ` (${siswa.persen}%)` : ''}\n• Izin: ${siswa.izin}x | Sakit: ${siswa.sakit}x | Alpha: ${siswa.alpha}x\n\n💰 *STATUS IURAN*\n• ${bul} ${filterTahun}: ${statusLabel[siswa.statusIuran] || siswa.statusIuran}${siswa.nominalIuran > 0 ? ` (${formatRupiah(siswa.nominalIuran)})` : ''}\n\nSiger Taekwondo Club 🥋`
+
+    return `📊 *LAPORAN BULANAN SISWA*\n*${clubName.toUpperCase()}*\n\n` +
+      `👤 *Nama Siswa*: ${siswa.nama}\n` +
+      `🥋 *Program*: ${siswa.programKelas}\n` +
+      `📅 *Periode*: ${bul} ${filterTahun}\n\n` +
+      `🥋 *REKAP KEHADIRAN*:\n` +
+      `• Total Kehadiran: *${siswa.hadir}x* dari ${siswa.totalSesi} sesi (${siswa.persen}%)\n` +
+      `• Izin: ${siswa.izin}x | Sakit: ${siswa.sakit}x | Alpha: ${siswa.alpha}x\n\n` +
+      `💰 *STATUS IURAN BULANAN*:\n` +
+      `• Tagihan: *${formatRupiah(siswa.nominalIuran)}*\n` +
+      `• Status: *${statusLabel[siswa.statusIuran] || siswa.statusIuran}*\n\n` +
+      `Tetap semangat berlatih! 🥋🔥\n` +
+      `_${clubName}_`
+  }
+
+  const handleKirimWA = (siswa: SiswaRekapTagihan, mode: 'tagihan' | 'rekap') => {
+    if (!siswa.no_hp_ortu) {
+      alert(`Nomor HP Orang Tua untuk siswa ${siswa.nama} belum terdaftar di data siswa.`)
+      return
+    }
+    const teks = mode === 'tagihan' ? generatePesanTagihan(siswa) : generatePesanRekapLengkap(siswa)
     const noWA = siswa.no_hp_ortu.replace(/^0/, '62').replace(/\D/g, '')
     window.open(`https://wa.me/${noWA}?text=${encodeURIComponent(teks)}`, '_blank')
   }
 
-  const TABS: { key: Tab; label: string }[] = [
-    { key: 'keuangan', label: '💰 Keuangan' },
-    { key: 'kehadiran', label: '📅 Kehadiran' },
-    { key: 'honor', label: '🏆 Honor Pelatih' },
-    { key: 'anggota', label: '👤 Anggota' },
-    { key: 'prestasi', label: '🎖️ Prestasi' },
-    { key: 'ortu', label: '📤 Blast WA Ortu' },
-  ]
+  const handleSalinPesan = (siswa: SiswaRekapTagihan, mode: 'tagihan' | 'rekap') => {
+    const teks = mode === 'tagihan' ? generatePesanTagihan(siswa) : generatePesanRekapLengkap(siswa)
+    navigator.clipboard.writeText(teks)
+    showToast(`📋 Pesan ${mode === 'tagihan' ? 'Tagihan' : 'Rekap'} untuk ${siswa.nama} berhasil disalin ke clipboard!`)
+  }
 
+  const handleSalinSemuaBelumBayar = () => {
+    const bul = BULAN_NAMES[parseInt(filterBulan)]
+    const listBelum = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak')
+    if (listBelum.length === 0) {
+      alert('Semua siswa sudah lunas untuk periode ini!')
+      return
+    }
+
+    const totalNominal = listBelum.reduce((acc, curr) => acc + curr.nominalIuran, 0)
+    let text = `📋 *DAFTAR SISWA BELUM BAYAR IURAN*\n` +
+      `📅 Periode: ${bul} ${filterTahun}\n` +
+      `👥 Total: ${listBelum.length} Siswa\n` +
+      `💰 Total Tagihan: ${formatRupiah(totalNominal)}\n\n`
+
+    listBelum.forEach((s, idx) => {
+      text += `${idx + 1}. *${s.nama}* (${s.programKelas}) - ${formatRupiah(s.nominalIuran)} (WA: ${s.no_hp_ortu || '-'})\n`
+    })
+
+    navigator.clipboard.writeText(text)
+    showToast(`📋 Daftar ${listBelum.length} siswa belum bayar berhasil disalin!`)
+  }
+
+  // Filter tagihan data
+  const filteredTagihan = tagihanData.filter(s => {
+    const matchSearch = s.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.no_hp_ortu.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchKelas = kelasFilter === 'semua' || s.programKelas.toLowerCase() === kelasFilter.toLowerCase()
+
+    if (!matchSearch || !matchKelas) return false
+
+    if (tagihanStatusFilter === 'belum_bayar') {
+      return s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak'
+    }
+    if (tagihanStatusFilter === 'menunggu_verifikasi') {
+      return s.statusIuran === 'menunggu_verifikasi'
+    }
+    if (tagihanStatusFilter === 'lunas') {
+      return s.statusIuran === 'lunas'
+    }
+    return true
+  })
+
+  // Filter kehadiran data
+  const filteredKehadiran = kehadiranData.filter(s => {
+    const matchSearch = s.nama.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchKelas = kelasFilter === 'semua' || s.programKelas.toLowerCase() === kelasFilter.toLowerCase()
+    return matchSearch && matchKelas
+  })
+
+  // Tagihan summary
+  const countBelumBayar = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak').length
+  const nominalBelumBayar = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak').reduce((acc, s) => acc + s.nominalIuran, 0)
+  const countMenungguVerif = tagihanData.filter(s => s.statusIuran === 'menunggu_verifikasi').length
+  const countLunas = tagihanData.filter(s => s.statusIuran === 'lunas').length
+  const nominalLunas = tagihanData.filter(s => s.statusIuran === 'lunas').reduce((acc, s) => acc + s.nominalIuran, 0)
+
+  // Kehadiran summary
+  const totalCatatanKehadiran = kehadiranData.reduce((acc, s) => acc + s.totalSesi, 0)
+  const totalHadirSemua = kehadiranData.reduce((acc, s) => acc + s.hadir, 0)
+  const totalIzinSemua = kehadiranData.reduce((acc, s) => acc + s.izin, 0)
+  const totalSakitSemua = kehadiranData.reduce((acc, s) => acc + s.sakit, 0)
+  const totalAlphaSemua = kehadiranData.reduce((acc, s) => acc + s.alpha, 0)
+  const avgKehadiran = totalCatatanKehadiran > 0 ? Math.round((totalHadirSemua / totalCatatanKehadiran) * 100) : 0
+
+  // Keuangan variables
   const iuranRows = keuanganData[0]?.iuranRows || []
   const merchantRows = keuanganData[0]?.merchantRows || []
   const transaksiRows = keuanganData[0]?.transaksi || []
   const payrollRun = keuanganData[0]?.payrollRun || null
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pemasukanIuran = iuranRows.filter((r: any) => r.status_bayar === 'lunas').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pemasukanMerchant = merchantRows.reduce((s: number, r: any) => s + Number(r.total_harga || 0), 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pemasukanManual = transaksiRows.filter((r: any) => r.jenis === 'income').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   const totalPemasukan = pemasukanIuran + pemasukanMerchant + pemasukanManual
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pengeluaranHonor = (payrollRun?.payroll_details || []).filter((d: any) => d.status_dibayar).reduce((s: number, d: any) => s + Number(d.total_payout || 0), 0)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pengeluaranManual = transaksiRows.filter((r: any) => r.jenis === 'expense').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   const totalPengeluaran = pengeluaranHonor + pengeluaranManual
   const saldoBersih = totalPemasukan - totalPengeluaran
 
+  const TABS: { key: Tab; label: string; badge?: number }[] = [
+    { key: 'tagihan_ortu', label: '📤 Tagihan & Blast WA', badge: countBelumBayar },
+    { key: 'kehadiran', label: '📅 Rekap Kehadiran' },
+    { key: 'keuangan', label: '💰 Keuangan' },
+    { key: 'honor', label: '🏆 Honor Pelatih' },
+    { key: 'anggota', label: '👤 Anggota' },
+    { key: 'prestasi', label: '🎖️ Prestasi' },
+  ]
+
   return (
-    <div className="max-w-5xl mx-auto flex flex-col gap-6 pb-10">
+    <div className="max-w-6xl mx-auto flex flex-col gap-6 pb-12">
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-5 right-5 z-50 p-4 bg-primary text-dark font-bold font-sans rounded-2xl border-2 border-dark shadow-brutal animate-bounce">
+          {toastMsg}
+        </div>
+      )}
+
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4 print:hidden">
         <div>
-          <h1 className="text-3xl font-bold font-sans text-dark">📄 Laporan &amp; Rekap</h1>
-          <p className="text-dark/60 font-sans mt-1">Rekap data untuk owner dan pengiriman laporan ke orang tua</p>
+          <h1 className="text-3xl font-bold font-sans text-dark">📄 Laporan, Rekap &amp; Tagihan</h1>
+          <p className="text-dark/60 font-sans mt-1">Rekap data kehadiran siswa, keuangan, dan pengiriman tagihan iuran WhatsApp</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => window.print()}
-            className="px-4 py-2 bg-dark text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-dark/80 transition-colors">
+            className="px-4 py-2 bg-dark text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-dark/80 transition-colors shadow-brutal">
             🖨️ Print / PDF
           </button>
-          {(['keuangan', 'kehadiran', 'prestasi', 'honor', 'ortu'] as Tab[]).includes(activeTab) && (
-            <button onClick={handleDownloadCSV}
-              className="px-4 py-2 bg-primary text-dark rounded-2xl font-bold text-sm border-2 border-primary hover:bg-primary/80 transition-colors">
-              ⬇️ Download CSV
-            </button>
-          )}
+          <button onClick={handleDownloadCSV}
+            className="px-4 py-2 bg-primary text-dark rounded-2xl font-bold text-sm border-2 border-dark hover:bg-primary/80 transition-colors shadow-brutal">
+            ⬇️ Download CSV
+          </button>
         </div>
       </div>
 
+      {/* Print View Header */}
       <div className="hidden print:block mb-4">
-        <h1 className="text-2xl font-bold">📄 Laporan Siger Taekwondo Club</h1>
+        <h1 className="text-2xl font-bold">📄 Laporan {clubSettings?.nama_club || 'Siger Taekwondo Club'}</h1>
         <p className="text-sm text-gray-500">Periode: {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</p>
         <hr className="mt-2" />
       </div>
 
+      {/* Month & Year Filter */}
       <Card className="print:hidden">
-        <div className="flex gap-4 flex-wrap items-end">
-          <div className="flex flex-col gap-2">
-            <label className="font-bold text-dark text-sm">Bulan</label>
-            <select value={filterBulan} onChange={e => setFilterBulan(e.target.value)}
-              className="border-2 border-dark rounded-2xl px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans min-w-[140px]">
-              {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
-                <option key={m} value={m}>{BULAN_NAMES[parseInt(m)]}</option>
-              ))}
-            </select>
+        <div className="flex gap-4 flex-wrap items-end justify-between">
+          <div className="flex gap-4 flex-wrap items-end">
+            <div className="flex flex-col gap-2">
+              <label className="font-bold text-dark text-sm">Bulan</label>
+              <select
+                value={filterBulan}
+                onChange={e => setFilterBulan(e.target.value)}
+                className="border-2 border-dark rounded-2xl px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans min-w-[150px]"
+              >
+                {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
+                  <option key={m} value={m}>{BULAN_NAMES[parseInt(m)]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="font-bold text-dark text-sm">Tahun</label>
+              <Input
+                type="number"
+                value={filterTahun}
+                onChange={e => setFilterTahun(e.target.value)}
+                className="max-w-[110px]"
+              />
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <label className="font-bold text-dark text-sm">Tahun</label>
-            <input type="number" value={filterTahun} onChange={e => setFilterTahun(e.target.value)}
-              className="border-2 border-dark rounded-2xl px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans w-[100px]" />
+
+          <div className="text-xs font-sans text-dark/70 flex items-center gap-2 bg-background p-3 rounded-xl border border-dark/20">
+            <span>💳 Rekening Pembayaran Aktif:</span>
+            <strong className="text-dark font-mono">
+              {clubSettings?.rekening_bank || 'Bank'} {clubSettings?.rekening_nomor ? `• ${clubSettings.rekening_nomor}` : '(Belum Diisi)'} (a.n {clubSettings?.rekening_atas_nama || '-'})
+            </strong>
           </div>
         </div>
       </Card>
 
+      {/* Main Tabs Navigation */}
       <div className="flex gap-2 flex-wrap print:hidden">
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2 rounded-2xl font-bold font-sans text-sm transition-all border-2 ${activeTab === t.key ? 'bg-dark text-white border-dark' : 'bg-white text-dark border-dark/30 hover:border-dark'}`}>
-            {t.label}
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`px-4 py-2.5 rounded-2xl font-bold font-sans text-sm transition-all border-2 flex items-center gap-2 ${activeTab === t.key ? 'bg-dark text-white border-dark shadow-brutal' : 'bg-white text-dark border-dark/30 hover:border-dark'}`}
+          >
+            <span>{t.label}</span>
+            {t.badge !== undefined && t.badge > 0 && (
+              <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${activeTab === t.key ? 'bg-accent text-white' : 'bg-accent/20 text-accent'}`}>
+                {t.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <Card className="text-center py-16 text-dark/50 font-sans">Memuat data laporan...</Card>
+        <Card className="text-center py-16 text-dark/50 font-sans">
+          <div className="text-3xl mb-2">⏳</div>
+          <p className="font-bold">Memuat data laporan...</p>
+        </Card>
       ) : (
         <>
+          {/* TAB 1: TAGIHAN SISWA & BLAST WA */}
+          {activeTab === 'tagihan_ortu' && (
+            <div className="flex flex-col gap-6">
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Card className="bg-red-50 border-2 border-red-500/50 p-4 text-center">
+                  <div className="text-xs font-bold text-red-600 uppercase">⏳ Belum Bayar</div>
+                  <div className="text-2xl font-bold font-sans text-red-700 mt-1">{countBelumBayar} Siswa</div>
+                  <div className="text-xs font-bold font-mono text-red-600 mt-0.5">{formatRupiah(nominalBelumBayar)}</div>
+                </Card>
+
+                <Card className="bg-yellow-50 border-2 border-yellow-500/50 p-4 text-center">
+                  <div className="text-xs font-bold text-yellow-700 uppercase">🔍 Menunggu Verif</div>
+                  <div className="text-2xl font-bold font-sans text-yellow-800 mt-1">{countMenungguVerif} Siswa</div>
+                  <div className="text-xs text-yellow-700 mt-0.5">Bukti transfer terunggah</div>
+                </Card>
+
+                <Card className="bg-green-50 border-2 border-green-500/50 p-4 text-center">
+                  <div className="text-xs font-bold text-green-700 uppercase">✅ Lunas</div>
+                  <div className="text-2xl font-bold font-sans text-green-800 mt-1">{countLunas} Siswa</div>
+                  <div className="text-xs font-bold font-mono text-green-700 mt-0.5">{formatRupiah(nominalLunas)}</div>
+                </Card>
+
+                <Card className="bg-white border-2 border-dark p-4 text-center">
+                  <div className="text-xs font-bold text-dark/60 uppercase">👥 Total Tagihan</div>
+                  <div className="text-2xl font-bold font-sans text-dark mt-1">{tagihanData.length} Siswa</div>
+                  <div className="text-xs font-bold font-mono text-dark/70 mt-0.5">{formatRupiah(nominalLunas + nominalBelumBayar)}</div>
+                </Card>
+              </div>
+
+              {/* Action Banner & Bulk Copy */}
+              <div className="p-4 bg-primary/15 border-2 border-dark rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-dark font-sans text-base">📢 Pengingat &amp; Tagihan Iuran Siswa</h3>
+                  <p className="text-xs text-dark/70 font-sans mt-0.5">
+                    Kirim pesan rincian tagihan atau rekap bulanan langsung ke WhatsApp orang tua dengan nomor rekening dojang.
+                  </p>
+                </div>
+                <div className="flex gap-2 flex-wrap shrink-0">
+                  <Button
+                    variant="accent"
+                    onClick={handleSalinSemuaBelumBayar}
+                    className="text-xs py-2 px-3 font-bold"
+                  >
+                    📋 Salin Daftar Belum Bayar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Sub-Filters */}
+              <Card className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  {/* Status Chips */}
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { key: 'belum_bayar', label: '🔴 Belum Bayar', count: countBelumBayar },
+                      { key: 'menunggu_verifikasi', label: '🔍 Menunggu Verif', count: countMenungguVerif },
+                      { key: 'lunas', label: '✅ Lunas', count: countLunas },
+                      { key: 'semua', label: 'Semua Status', count: tagihanData.length },
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setTagihanStatusFilter(f.key as any)}
+                        className={`px-3 py-1.5 rounded-xl font-bold font-sans text-xs transition-all border ${tagihanStatusFilter === f.key ? 'bg-dark text-white border-dark shadow-sm' : 'bg-background text-dark/70 border-dark/20 hover:border-dark'}`}
+                      >
+                        {f.label} ({f.count})
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Class Filter & Search */}
+                  <div className="flex gap-3 flex-wrap items-center">
+                    <select
+                      value={kelasFilter}
+                      onChange={e => setKelasFilter(e.target.value)}
+                      className="border border-dark/30 rounded-xl px-3 py-2 text-xs font-sans bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="semua">Semua Program Kelas</option>
+                      <option value="umum">Kelas Umum</option>
+                      <option value="prestasi">Kelas Prestasi</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Cari nama siswa / no HP..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="border border-dark/30 rounded-xl px-3 py-2 text-xs font-sans bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
+                    />
+                  </div>
+                </div>
+
+                {/* List of Students */}
+                <div className="flex flex-col gap-3 mt-2">
+                  {filteredTagihan.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak' ? 'bg-red-50/50 border-red-300' : s.statusIuran === 'menunggu_verifikasi' ? 'bg-yellow-50/50 border-yellow-300' : 'bg-white border-dark/20'}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-dark font-sans text-base">{s.nama}</h4>
+                          <Badge color="dark">{s.programKelas}</Badge>
+                          <Badge color={s.statusIuran === 'lunas' ? 'primary' : s.statusIuran === 'menunggu_verifikasi' ? 'secondary' : 'accent'}>
+                            {s.statusIuran === 'lunas' ? '✅ Lunas' : s.statusIuran === 'menunggu_verifikasi' ? '🔍 Menunggu Verif' : '⏳ Belum Bayar'}
+                          </Badge>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-dark/70 font-sans">
+                          <div>
+                            💰 Tagihan: <strong className="text-dark font-mono text-sm">{formatRupiah(s.nominalIuran)}</strong>
+                          </div>
+                          <div>
+                            📅 Kehadiran: <strong className="text-green-700">{s.hadir}</strong>/{s.totalSesi} sesi ({s.persen}%)
+                          </div>
+                          <div>
+                            📱 HP Ortu: <strong className="text-dark font-mono">{s.no_hp_ortu || 'Belum diisi'}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
+                        <button
+                          onClick={() => setSelectedSiswaDetail(s)}
+                          className="px-3 py-2 bg-white border border-dark/30 rounded-xl text-xs font-bold text-dark hover:bg-dark/5 transition-colors flex items-center gap-1.5"
+                          title="Lihat riwayat kehadiran siswa ini"
+                        >
+                          🔍 Absensi
+                        </button>
+
+                        <button
+                          onClick={() => handleSalinPesan(s, 'tagihan')}
+                          className="px-3 py-2 bg-secondary/30 border border-dark/30 rounded-xl text-xs font-bold text-dark hover:bg-secondary/50 transition-colors flex items-center gap-1.5"
+                          title="Salin pesan tagihan ke clipboard"
+                        >
+                          📋 Salin
+                        </button>
+
+                        <button
+                          onClick={() => handleKirimWA(s, 'tagihan')}
+                          className="px-3.5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                          title="Kirim pesan tagihan WhatsApp"
+                        >
+                          💬 Kirim Tagihan (WA)
+                        </button>
+
+                        <button
+                          onClick={() => handleKirimWA(s, 'rekap')}
+                          className="px-3 py-2 bg-dark hover:bg-dark/80 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                          title="Kirim laporan rekap lengkap bulanan via WA"
+                        >
+                          📊 Rekap (WA)
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {filteredTagihan.length === 0 && (
+                    <div className="text-center py-12 text-dark/40 font-sans">
+                      <div className="text-3xl mb-2">🔍</div>
+                      <p>Tidak ada data tagihan yang sesuai dengan filter.</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* TAB 2: REKAP KEHADIRAN SISWA */}
+          {activeTab === 'kehadiran' && (
+            <div className="flex flex-col gap-6">
+              {/* Summary Stats Kehadiran */}
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                <Card className="bg-white border-2 border-dark text-center p-3">
+                  <div className="text-xs text-dark/50 font-bold uppercase">Total Sesi</div>
+                  <div className="text-2xl font-bold font-sans text-dark mt-1">{totalCatatanKehadiran}</div>
+                </Card>
+                <Card className="bg-green-50 border-2 border-green-500/40 text-center p-3">
+                  <div className="text-xs text-green-700 font-bold uppercase">✅ Hadir</div>
+                  <div className="text-2xl font-bold font-sans text-green-800 mt-1">{totalHadirSemua}</div>
+                </Card>
+                <Card className="bg-blue-50 border-2 border-blue-500/40 text-center p-3">
+                  <div className="text-xs text-blue-700 font-bold uppercase">📝 Izin</div>
+                  <div className="text-2xl font-bold font-sans text-blue-800 mt-1">{totalIzinSemua}</div>
+                </Card>
+                <Card className="bg-yellow-50 border-2 border-yellow-500/40 text-center p-3">
+                  <div className="text-xs text-yellow-700 font-bold uppercase">🤒 Sakit</div>
+                  <div className="text-2xl font-bold font-sans text-yellow-800 mt-1">{totalSakitSemua}</div>
+                </Card>
+                <Card className="bg-red-50 border-2 border-red-500/40 text-center p-3">
+                  <div className="text-xs text-red-600 font-bold uppercase">❌ Alpha</div>
+                  <div className="text-2xl font-bold font-sans text-red-700 mt-1">{totalAlphaSemua}</div>
+                </Card>
+                <Card className="bg-primary/20 border-2 border-primary text-center p-3">
+                  <div className="text-xs text-dark/70 font-bold uppercase">Rata-rata</div>
+                  <div className="text-2xl font-bold font-sans text-dark mt-1">{avgKehadiran}%</div>
+                </Card>
+              </div>
+
+              {/* Table Kehadiran */}
+              <Card>
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                  <h2 className="font-bold text-dark text-lg">
+                    📅 Rekap Kehadiran Siswa — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}
+                  </h2>
+                  <div className="flex gap-3 flex-wrap items-center">
+                    <select
+                      value={kelasFilter}
+                      onChange={e => setKelasFilter(e.target.value)}
+                      className="border border-dark/30 rounded-xl px-3 py-2 text-xs font-sans bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="semua">Semua Program</option>
+                      <option value="umum">Kelas Umum</option>
+                      <option value="prestasi">Kelas Prestasi</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Cari nama siswa..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="border border-dark/30 rounded-xl px-3 py-2 text-xs font-sans bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary min-w-[180px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm font-sans">
+                    <thead>
+                      <tr className="border-b-2 border-dark/20 text-dark/60 font-bold text-xs uppercase">
+                        <th className="text-left py-2.5">Nama Siswa</th>
+                        <th className="text-left py-2.5">Kelas</th>
+                        <th className="text-center py-2.5 text-green-700">✅ Hadir</th>
+                        <th className="text-center py-2.5 text-blue-600">📝 Izin</th>
+                        <th className="text-center py-2.5 text-yellow-600">🤒 Sakit</th>
+                        <th className="text-center py-2.5 text-red-600">❌ Alpha</th>
+                        <th className="text-center py-2.5">Total Sesi</th>
+                        <th className="text-center py-2.5">% Hadir</th>
+                        <th className="text-center py-2.5 print:hidden">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredKehadiran.map((s, i) => (
+                        <tr key={i} className="border-b border-dark/10 hover:bg-black/5 transition-colors">
+                          <td className="py-2.5 font-bold text-dark">{s.nama}</td>
+                          <td className="py-2.5">
+                            <Badge color="dark">{s.programKelas}</Badge>
+                          </td>
+                          <td className="py-2.5 text-center text-green-700 font-bold">{s.hadir}</td>
+                          <td className="py-2.5 text-center text-blue-600">{s.izin}</td>
+                          <td className="py-2.5 text-center text-yellow-600">{s.sakit}</td>
+                          <td className="py-2.5 text-center text-red-600">{s.alpha}</td>
+                          <td className="py-2.5 text-center font-bold text-dark/70">{s.totalSesi}</td>
+                          <td className="py-2.5 text-center">
+                            <span className={`font-bold px-2 py-0.5 rounded-full text-xs ${s.persen >= 80 ? 'bg-green-100 text-green-700' : s.persen >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'}`}>
+                              {s.persen}%
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-center print:hidden">
+                            <button
+                              onClick={() => setSelectedSiswaDetail(s)}
+                              className="px-2.5 py-1 bg-white border border-dark/30 rounded-lg text-xs font-bold text-dark hover:bg-dark/10 transition-colors"
+                            >
+                              🔍 Detail
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {filteredKehadiran.length === 0 && (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-dark/40">
+                            Tidak ada data absensi untuk periode ini
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* TAB 3: KEUANGAN */}
           {activeTab === 'keuangan' && (
             <div className="flex flex-col gap-6">
               {/* Summary Cards */}
@@ -486,43 +1111,7 @@ export default function AdminLaporanPage() {
             </div>
           )}
 
-          {activeTab === 'kehadiran' && (
-            <Card>
-              <h2 className="font-bold text-dark mb-3">📅 Rekap Kehadiran — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm font-sans">
-                  <thead><tr className="border-b-2 border-dark/20">
-                    <th className="text-left py-2 text-dark/60 font-bold">Nama Siswa</th>
-                    <th className="text-center py-2 text-green-700 font-bold">✅ Hadir</th>
-                    <th className="text-center py-2 text-blue-600 font-bold">📝 Izin</th>
-                    <th className="text-center py-2 text-yellow-600 font-bold">🤒 Sakit</th>
-                    <th className="text-center py-2 text-red-600 font-bold">❌ Alpha</th>
-                    <th className="text-center py-2 text-dark/60 font-bold">% Hadir</th>
-                  </tr></thead>
-                  <tbody>
-                    {kehadiranData.map((s, i) => {
-                      const total = s.hadir + s.izin + s.sakit + s.alpha
-                      const pct = total > 0 ? Math.round(s.hadir / total * 100) : 0
-                      return (
-                        <tr key={i} className="border-b border-dark/10">
-                          <td className="py-2 font-bold text-dark">{s.nama}</td>
-                          <td className="py-2 text-center text-green-700 font-bold">{s.hadir}</td>
-                          <td className="py-2 text-center text-blue-600">{s.izin}</td>
-                          <td className="py-2 text-center text-yellow-600">{s.sakit}</td>
-                          <td className="py-2 text-center text-red-600">{s.alpha}</td>
-                          <td className="py-2 text-center">
-                            <span className={`font-bold ${pct >= 80 ? 'text-green-700' : pct >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>{pct}%</span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                    {kehadiranData.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-dark/40">Tidak ada data absensi untuk periode ini</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
-
+          {/* TAB 4: HONOR PELATIH */}
           {activeTab === 'honor' && (
             <div className="flex flex-col gap-4">
               {honorData.length === 0 ? (
@@ -585,6 +1174,7 @@ export default function AdminLaporanPage() {
             </div>
           )}
 
+          {/* TAB 5: ANGGOTA */}
           {activeTab === 'anggota' && (
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -621,6 +1211,7 @@ export default function AdminLaporanPage() {
             </div>
           )}
 
+          {/* TAB 6: PRESTASI */}
           {activeTab === 'prestasi' && (
             <Card>
               <h2 className="font-bold text-dark mb-4">🎖️ Rekap Prestasi Club</h2>
@@ -664,35 +1255,90 @@ export default function AdminLaporanPage() {
               </div>
             </Card>
           )}
+        </>
+      )}
 
-          {activeTab === 'ortu' && (
-            <Card>
-              <h2 className="font-bold text-dark mb-1">📤 Blast Laporan via WhatsApp</h2>
-              <p className="text-sm text-dark/60 mb-5">Kirim rekap kehadiran &amp; iuran ke orang tua masing-masing siswa untuk <b>{BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</b></p>
-              <div className="flex flex-col gap-3">
-                {ortuData.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 p-4 bg-background rounded-2xl border-2 border-dark/10">
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-dark text-base">{s.nama}</div>
-                      <div className="text-xs text-dark/50 mt-1 flex flex-wrap gap-3">
-                        <span>📅 Hadir: <b className="text-green-700">{s.hadir}</b>/{s.totalSesi}{s.totalSesi > 0 && ` (${s.persen}%)`}</span>
-                        <span>💰 Iuran: <b className={s.statusIuran === 'lunas' ? 'text-green-700' : 'text-red-600'}>{s.statusIuran === 'lunas' ? '✅ Lunas' : s.statusIuran === 'belum_bayar' ? '❌ Belum' : '🔍 Menunggu'}</b></span>
+      {/* MODAL: DETAIL RIWAYAT ABSENSI SISWA */}
+      {selectedSiswaDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-dark/60 backdrop-blur-sm" onClick={() => setSelectedSiswaDetail(null)} />
+          <div className="relative bg-white border-2 border-dark shadow-brutal w-full max-w-lg rounded-2xl p-6 z-10 flex flex-col gap-4 max-h-[85vh] overflow-hidden">
+            <div className="flex justify-between items-start border-b border-dark/10 pb-3">
+              <div>
+                <h3 className="text-xl font-bold font-sans text-dark">{selectedSiswaDetail.nama}</h3>
+                <p className="text-xs text-dark/60 font-sans mt-0.5">
+                  Program: <strong className="text-dark">{selectedSiswaDetail.programKelas}</strong> · Periode: {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedSiswaDetail(null)}
+                className="w-8 h-8 rounded-full border border-dark/30 hover:bg-dark hover:text-white flex items-center justify-center font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="p-2 bg-green-50 rounded-xl border border-green-300">
+                <div className="text-xs font-bold text-green-700">Hadir</div>
+                <div className="text-lg font-bold text-green-800">{selectedSiswaDetail.hadir}</div>
+              </div>
+              <div className="p-2 bg-blue-50 rounded-xl border border-blue-300">
+                <div className="text-xs font-bold text-blue-700">Izin</div>
+                <div className="text-lg font-bold text-blue-800">{selectedSiswaDetail.izin}</div>
+              </div>
+              <div className="p-2 bg-yellow-50 rounded-xl border border-yellow-300">
+                <div className="text-xs font-bold text-yellow-700">Sakit</div>
+                <div className="text-lg font-bold text-yellow-800">{selectedSiswaDetail.sakit}</div>
+              </div>
+              <div className="p-2 bg-red-50 rounded-xl border border-red-300">
+                <div className="text-xs font-bold text-red-600">Alpha</div>
+                <div className="text-lg font-bold text-red-700">{selectedSiswaDetail.alpha}</div>
+              </div>
+            </div>
+
+            {/* Attendance percentage indicator */}
+            <div className="p-3 bg-background rounded-xl border border-dark/10 flex justify-between items-center text-xs font-sans">
+              <span className="text-dark/70 font-bold">Tingkat Kehadiran:</span>
+              <span className="font-bold text-sm text-green-700">
+                {selectedSiswaDetail.hadir} / {selectedSiswaDetail.totalSesi} Sesi ({selectedSiswaDetail.persen}%)
+              </span>
+            </div>
+
+            {/* Session List */}
+            <div className="flex-1 overflow-y-auto flex flex-col gap-2 pr-1">
+              <div className="text-xs font-bold text-dark/60 uppercase">Daftar Sesi Latihan:</div>
+              {selectedSiswaDetail.riwayat.length === 0 ? (
+                <div className="text-center py-8 text-dark/40 text-xs">Belum ada catatan sesi latihan untuk bulan ini</div>
+              ) : (
+                selectedSiswaDetail.riwayat.map((r, idx) => (
+                  <div key={idx} className="p-3 bg-white border border-dark/20 rounded-xl flex items-center justify-between gap-3 text-xs">
+                    <div>
+                      <div className="font-bold text-dark font-sans">
+                        {new Date(r.tgl).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                      </div>
+                      <div className="text-dark/60 mt-0.5">
+                        Kelas: <strong className="text-dark">{r.kelas}</strong> · Pelatih: {r.pelatih_nama}
                       </div>
                     </div>
-                    <button onClick={() => bukaWA(s)}
-                      className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-2xl font-bold text-sm transition-colors whitespace-nowrap shrink-0">
-                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                      </svg>
-                      Kirim WA
-                    </button>
+                    <Badge color={r.status_hadir === 'hadir' ? 'primary' : r.status_hadir === 'izin' ? 'dark' : r.status_hadir === 'sakit' ? 'secondary' : 'accent'}>
+                      {r.status_hadir.toUpperCase()}
+                    </Badge>
                   </div>
-                ))}
-                {ortuData.length === 0 && <div className="text-center py-16 text-dark/40">Tidak ada siswa aktif</div>}
-              </div>
-            </Card>
-          )}
-        </>
+                ))
+              )}
+            </div>
+
+            <Button
+              variant="secondary"
+              onClick={() => setSelectedSiswaDetail(null)}
+              className="w-full text-sm py-2.5"
+            >
+              Tutup
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   )
