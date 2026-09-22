@@ -303,3 +303,25 @@ export interface KeranjangItem {
   varian: ProdukVarian
   qty: number
 }
+
+export interface PenilaianAtlet {
+  id: string
+  siswa_id: string
+  pelatih_id: string | null
+  periode_bulan: number
+  periode_tahun: number
+  skor_fisik: number
+  skor_kyorugi: number
+  skor_poomsae: number
+  skor_disiplin: number
+  catatan_pelatih: string | null
+  rekomendasi: string | null
+  created_at: string
+  updated_at: string
+  siswa?: Pick<Siswa, 'nama' | 'sabuk_saat_ini'> & {
+    program_kelas?: {
+      nama_program: string
+    }
+  }
+  pelatih?: Pick<Pelatih, 'nama'>
+}

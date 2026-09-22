@@ -331,6 +331,41 @@ export default function AdminKeuanganPage() {
   const expenseFromHonor = useMemo(() => allTransaksi.filter(t => t.sumber === 'honor').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const expenseFromManual = useMemo(() => allTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
 
+  // ── P&L Statement Calculation (Filtered by selected month or full year)
+  const pnlData = useMemo(() => {
+    const list = bulanFilter === '0' 
+      ? allTransaksi 
+      : allTransaksi.filter(t => t.bulan === parseInt(bulanFilter))
+
+    const revIuran = list.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0)
+    const revMerchant = list.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0)
+    const revOthers = list.filter(t => t.sumber === 'manual' && t.jenis === 'income').reduce((s, t) => s + t.nominal, 0)
+    const grossRev = revIuran + revMerchant + revOthers
+
+    const expHonor = list.filter(t => t.sumber === 'honor' || t.kategori === 'Honor Pelatih').reduce((s, t) => s + t.nominal, 0)
+    const expSewa = list.filter(t => t.kategori === 'Sewa Tempat').reduce((s, t) => s + t.nominal, 0)
+    const expPerlengkapan = list.filter(t => t.kategori === 'Perlengkapan').reduce((s, t) => s + t.nominal, 0)
+    const expOthers = list.filter(t => t.jenis === 'expense' && t.kategori !== 'Honor Pelatih' && t.kategori !== 'Sewa Tempat' && t.kategori !== 'Perlengkapan').reduce((s, t) => s + t.nominal, 0)
+    const totalExp = expHonor + expSewa + expPerlengkapan + expOthers
+
+    const netProfit = grossRev - totalExp
+    const margin = grossRev > 0 ? Math.round((netProfit / grossRev) * 100) : 0
+
+    return {
+      revIuran,
+      revMerchant,
+      revOthers,
+      grossRev,
+      expHonor,
+      expSewa,
+      expPerlengkapan,
+      expOthers,
+      totalExp,
+      netProfit,
+      margin,
+    }
+  }, [allTransaksi, bulanFilter])
+
   // ──────────────────────────────────────────
   // Handlers: Add
   // ──────────────────────────────────────────
@@ -535,6 +570,110 @@ export default function AdminKeuanganPage() {
               <Bar dataKey="Expense" fill="#F87171" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* ── Laporan Laba Rugi (P&L Statement) ── */}
+      <Card className="border-[3px] border-dark bg-white">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-6 border-b-2 border-dark/10 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">📑</span>
+              <h2 className="font-bold font-sans text-dark text-xl">Laporan Laba Rugi (P&L Statement)</h2>
+            </div>
+            <p className="text-xs text-dark/60 font-sans mt-0.5">
+              Ringkasan performa finansial club {bulanFilter !== '0' ? `bulan ${BULAN_FULL[parseInt(bulanFilter)]} ${tahunFilter}` : `tahun ${tahunFilter}`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 text-xs font-bold rounded-xl border-2 ${
+              pnlData.netProfit >= 0 ? 'bg-green-100 text-green-800 border-green-300' : 'bg-red-100 text-red-800 border-red-300'
+            }`}>
+              {pnlData.netProfit >= 0 ? '🟢 Surplus / Profit' : '🔴 Defisit / Rugi'} ({pnlData.margin}%)
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Sisi Pendapatan */}
+          <div className="flex flex-col gap-3 p-4 bg-[#FDF6EC] border-2 border-dark rounded-2xl">
+            <h3 className="font-bold text-dark text-sm uppercase tracking-wider text-green-700 flex items-center justify-between">
+              <span>1. Pendapatan Usaha (Revenue)</span>
+              <span>💵</span>
+            </h3>
+            <div className="flex flex-col gap-2 divide-y divide-dark/10 text-xs font-sans">
+              <div className="flex justify-between pt-1">
+                <span className="text-dark/70">Iuran Bulanan Siswa (SPP)</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.revIuran)}</span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-dark/70">Penjualan Merchant / Seragam</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.revMerchant)}</span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-dark/70">Pendapatan Lain / Manual</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.revOthers)}</span>
+              </div>
+            </div>
+            <div className="mt-2 pt-3 border-t-2 border-dark flex justify-between items-center text-sm font-bold">
+              <span className="text-dark font-sans">Total Pendapatan Kotor</span>
+              <span className="text-green-700 font-sans">{formatRupiah(pnlData.grossRev)}</span>
+            </div>
+          </div>
+
+          {/* Sisi Beban / Pengeluaran */}
+          <div className="flex flex-col gap-3 p-4 bg-[#FDF6EC] border-2 border-dark rounded-2xl">
+            <h3 className="font-bold text-dark text-sm uppercase tracking-wider text-red-600 flex items-center justify-between">
+              <span>2. Beban Operasional (Expenses)</span>
+              <span>💸</span>
+            </h3>
+            <div className="flex flex-col gap-2 divide-y divide-dark/10 text-xs font-sans">
+              <div className="flex justify-between pt-1">
+                <span className="text-dark/70">Honor & Gaji Pelatih (Payroll)</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.expHonor)}</span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-dark/70">Sewa Tempat Latihan / Dojang</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.expSewa)}</span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-dark/70">Perlengkapan & Matras</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.expPerlengkapan)}</span>
+              </div>
+              <div className="flex justify-between pt-2">
+                <span className="text-dark/70">Operasional & Administrasi Lain</span>
+                <span className="font-bold text-dark">{formatRupiah(pnlData.expOthers)}</span>
+              </div>
+            </div>
+            <div className="mt-2 pt-3 border-t-2 border-dark flex justify-between items-center text-sm font-bold">
+              <span className="text-dark font-sans">Total Beban Operasional</span>
+              <span className="text-red-600 font-sans">{formatRupiah(pnlData.totalExp)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom P&L Summary Bar */}
+        <div className="mt-6 p-4 bg-white border-2 border-dark rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-brutal">
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-xl border-2 border-dark flex items-center justify-center text-2xl ${
+              pnlData.netProfit >= 0 ? 'bg-primary' : 'bg-accent text-white'
+            }`}>
+              {pnlData.netProfit >= 0 ? '🏆' : '⚠️'}
+            </div>
+            <div>
+              <p className="font-bold text-dark text-base font-sans">
+                {pnlData.netProfit >= 0 ? 'Laba Bersih (Net Profit)' : 'Rugi Bersih (Net Loss)'}
+              </p>
+              <p className="text-xs text-dark/60 font-sans">
+                Margin Keuntungan Bersih: <b className="text-dark font-mono">{pnlData.margin}%</b>
+              </p>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className={`text-2xl font-bold font-sans ${pnlData.netProfit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+              {formatRupiah(pnlData.netProfit)}
+            </span>
+          </div>
         </div>
       </Card>
 

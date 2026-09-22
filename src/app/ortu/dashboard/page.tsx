@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
-import type { Siswa, Iuran, StatusPesanan } from '@/lib/types'
+import { useOrtuChild } from '@/context/OrtuChildContext'
+import type { Siswa, Iuran, StatusPesanan, PenilaianAtlet } from '@/lib/types'
 
 const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
   menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
@@ -16,11 +17,12 @@ const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'prim
 }
 
 export default function OrtuDashboardPage() {
-  const [siswa, setSiswa] = useState<Siswa | null>(null)
+  const { activeChild, loading: childLoading } = useOrtuChild()
   const [iuran, setIuran] = useState<Iuran | null>(null)
   const [kehadiran, setKehadiran] = useState({ persen: 0, hadir: 0, total: 0 })
   const [agenda, setAgenda] = useState<{jenis: string, nama: string, tgl: string} | null>(null)
   const [pesananTerbaru, setPesananTerbaru] = useState<any | null>(null)
+  const [raportTerbaru, setRaportTerbaru] = useState<PenilaianAtlet | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Widget baru states
@@ -30,21 +32,11 @@ export default function OrtuDashboardPage() {
   const supabase = createClient()
 
   const fetchDashboard = useCallback(async () => {
+    if (!activeChild?.id) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: profile } = await supabase.from('profiles').select('siswa_id').eq('id', user.id).single()
-    if (!profile?.siswa_id) { setLoading(false); return }
-
-    // 1. Data Siswa
-    const { data: sData } = await supabase
-      .from('siswa')
-      .select('*, program_kelas(nama_program)')
-      .eq('id', profile.siswa_id)
-      .single()
-    
-    if (sData) setSiswa(sData as Siswa)
 
     const now = new Date()
     const bulan = now.getMonth() + 1
@@ -52,7 +44,8 @@ export default function OrtuDashboardPage() {
     const today = now.toISOString().split('T')[0]
 
     const startDate = `${tahun}-${String(bulan).padStart(2, '0')}-01`
-    const endDate = new Date(tahun, bulan, 0).toLocaleDateString('sv-SE')
+    const lastDay = new Date(tahun, bulan, 0).getDate()
+    const endDate = `${tahun}-${String(bulan).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
     // Fetch dashboard data in parallel
     const [
@@ -61,16 +54,16 @@ export default function OrtuDashboardPage() {
       ujianResult,
       eventResult,
       pesananResult,
-      // NEW Queries
-      riwayatUjianResult
+      riwayatUjianResult,
+      raportResult
     ] = await Promise.all([
-      supabase.from('iuran').select('*').eq('siswa_id', profile.siswa_id).eq('bulan', bulan).eq('tahun', tahun).maybeSingle(),
-      supabase.from('absensi_siswa').select('id, tgl, status_hadir').eq('siswa_id', profile.siswa_id).gte('tgl', startDate).lte('tgl', endDate).order('tgl', { ascending: false }),
-      supabase.from('ujian_sabuk').select('tgl_ujian').eq('siswa_id', profile.siswa_id).gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
-      supabase.from('event_peserta').select('event_kompetisi!inner(nama, tgl)').eq('siswa_id', profile.siswa_id).eq('status_daftar', 'terdaftar').gte('event_kompetisi.tgl', today).order('event_kompetisi(tgl)', { ascending: true }).limit(1),
-      supabase.from('pesanan_merchant').select('id, status, total_harga, created_at').eq('siswa_id', profile.siswa_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      // Riwayat Ujian Anak
-      supabase.from('ujian_sabuk').select('id, tgl_ujian, sabuk_asal, sabuk_tujuan, hasil').eq('siswa_id', profile.siswa_id).order('tgl_ujian', { ascending: false })
+      supabase.from('iuran').select('*').eq('siswa_id', activeChild.id).eq('bulan', bulan).eq('tahun', tahun).maybeSingle(),
+      supabase.from('absensi_siswa').select('id, tgl, status_hadir').eq('siswa_id', activeChild.id).gte('tgl', startDate).lte('tgl', endDate).order('tgl', { ascending: false }),
+      supabase.from('ujian_sabuk').select('tgl_ujian').eq('siswa_id', activeChild.id).gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
+      supabase.from('event_peserta').select('event_kompetisi!inner(nama, tgl)').eq('siswa_id', activeChild.id).eq('status_daftar', 'terdaftar').gte('event_kompetisi.tgl', today).order('event_kompetisi(tgl)', { ascending: true }).limit(1),
+      supabase.from('pesanan_merchant').select('id, status, total_harga, created_at').eq('siswa_id', activeChild.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('ujian_sabuk').select('id, tgl_ujian, sabuk_asal, sabuk_tujuan, hasil').eq('siswa_id', activeChild.id).order('tgl_ujian', { ascending: false }),
+      supabase.from('penilaian_atlet').select('*').eq('siswa_id', activeChild.id).order('periode_tahun', { ascending: false }).order('periode_bulan', { ascending: false }).limit(1).maybeSingle()
     ])
 
     const iData = iuranResult.data
@@ -78,6 +71,12 @@ export default function OrtuDashboardPage() {
 
     if (pesananResult.data) {
       setPesananTerbaru(pesananResult.data)
+    }
+
+    if (raportResult.data) {
+      setRaportTerbaru(raportResult.data as PenilaianAtlet)
+    } else {
+      setRaportTerbaru(null)
     }
 
     const absensiList = absensiResult.data || []
@@ -115,12 +114,18 @@ export default function OrtuDashboardPage() {
     setRiwayatUjian(riwayatUjianResult.data || [])
 
     setLoading(false)
-  }, [supabase])
+  }, [activeChild, supabase])
 
-  useEffect(() => { fetchDashboard() }, [fetchDashboard])
+  useEffect(() => {
+    if (activeChild) {
+      fetchDashboard()
+    } else if (!childLoading) {
+      setLoading(false)
+    }
+  }, [fetchDashboard, activeChild, childLoading])
 
-  if (loading) return <div className="p-8 text-center text-dark/50 font-pixel text-sm">Loading...</div>
-  if (!siswa) return <div className="p-8 text-center text-dark font-pixel text-sm">Akun Anda belum ditautkan ke data anak/siswa.</div>
+  if (childLoading || loading) return <div className="p-8 text-center text-dark/50 font-pixel text-sm">Loading data...</div>
+  if (!activeChild) return <div className="p-8 text-center text-dark font-pixel text-sm">Akun Anda belum ditautkan ke data anak/siswa.</div>
 
   const iuranStatusText = iuran?.status_bayar === 'lunas' ? 'Lunas' : iuran?.status_bayar === 'menunggu_verifikasi' ? 'Menunggu Verifikasi' : 'Belum Bayar'
   const iuranColor = iuran?.status_bayar === 'lunas' ? 'primary' : iuran?.status_bayar === 'menunggu_verifikasi' ? 'secondary' : 'accent'
@@ -131,7 +136,7 @@ export default function OrtuDashboardPage() {
 
   // RPG Rank / Belt visualizer
   const SABUK_ORDER = ['Putih', 'Kuning', 'Hijau', 'Biru', 'Merah', 'Hitam']
-  const currentBeltIdx = SABUK_ORDER.indexOf(siswa.sabuk_saat_ini)
+  const currentBeltIdx = SABUK_ORDER.indexOf(activeChild.sabuk_saat_ini)
   const nextBelt = currentBeltIdx !== -1 && currentBeltIdx < SABUK_ORDER.length - 1 ? SABUK_ORDER[currentBeltIdx + 1] : 'Hitam (Max)'
   const progressBelt = currentBeltIdx !== -1 ? Math.round(((currentBeltIdx + 1) / SABUK_ORDER.length) * 100) : 100
 
@@ -139,7 +144,7 @@ export default function OrtuDashboardPage() {
     <div className="flex flex-col gap-6 max-w-4xl mx-auto pb-10">
       <div>
         <h1 className="text-2xl font-pixel text-dark">Dashboard Orang Tua</h1>
-        <p className="text-dark/60 font-sans text-sm mt-1">Pantau perkembangan dan administrasi anak Anda</p>
+        <p className="text-dark/60 font-sans text-sm mt-1">Pantau perkembangan dan administrasi <b>{activeChild.nama}</b></p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -151,19 +156,19 @@ export default function OrtuDashboardPage() {
             </div>
           </div>
           <div className="pt-12 px-5 pb-5 text-dark">
-            <h2 className="font-pixel text-xl">{siswa.nama}</h2>
+            <h2 className="font-pixel text-xl">{activeChild.nama}</h2>
             <div className="mt-4 flex flex-col gap-2">
               <div className="flex justify-between border-b border-dark/10 pb-2">
                 <span className="text-dark/50 font-pixel text-[11px]">SABUK SEKARANG</span>
-                <span className="font-pixel text-sm">{siswa.sabuk_saat_ini}</span>
+                <span className="font-pixel text-sm">{activeChild.sabuk_saat_ini}</span>
               </div>
               <div className="flex justify-between border-b border-dark/10 pb-2">
                 <span className="text-dark/50 font-pixel text-[11px]">GUILD / KELAS</span>
-                <span className="font-pixel text-sm">{siswa.program_kelas?.nama_program || '-'}</span>
+                <span className="font-pixel text-sm">{(activeChild as any).program_kelas?.nama_program || '-'}</span>
               </div>
               <div className="flex justify-between pb-1">
                 <span className="text-dark/50 font-pixel text-[11px]">UMUR</span>
-                <span className="font-pixel text-sm">{new Date().getFullYear() - new Date(siswa.tgl_lahir).getFullYear()} Tahun</span>
+                <span className="font-pixel text-sm">{activeChild.tgl_lahir ? new Date().getFullYear() - new Date(activeChild.tgl_lahir).getFullYear() : '-'} Tahun</span>
               </div>
             </div>
           </div>
@@ -213,6 +218,33 @@ export default function OrtuDashboardPage() {
         </div>
       </div>
 
+      {/* Raport Highlight */}
+      {raportTerbaru && (
+        <Card className="border-[3px] border-dark bg-gradient-to-r from-yellow-50 to-white">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📊</span>
+                <h3 className="font-pixel text-base text-dark">Raport Evaluasi Pelatih</h3>
+                <span className="px-2 py-0.5 bg-primary border border-dark text-[10px] font-bold uppercase rounded">
+                  {raportTerbaru.rekomendasi.replace('_', ' ')}
+                </span>
+              </div>
+              <p className="text-xs text-dark/70 font-sans mt-1">
+                Skor Rata-Rata: <b className="text-dark font-mono text-sm">{Math.round((raportTerbaru.nilai_fisik + raportTerbaru.nilai_kyorugi + raportTerbaru.nilai_poomsae + raportTerbaru.nilai_disiplin) / 4)}/100</b>
+                {raportTerbaru.catatan_pelatih && <span> • <i>"{raportTerbaru.catatan_pelatih}"</i></span>}
+              </p>
+            </div>
+            <Link
+              href="/ortu/laporan"
+              className="px-4 py-2 bg-dark text-white font-pixel text-xs rounded-xl shadow hover:bg-dark/80 shrink-0"
+            >
+              Lihat Raport Lengkap →
+            </Link>
+          </div>
+        </Card>
+      )}
+
       {/* ── BARIS 2: Progress Sabuk & Detail Absensi ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Progress Sabuk RPG Style */}
@@ -223,7 +255,7 @@ export default function OrtuDashboardPage() {
           </div>
           <div className="flex flex-col gap-3">
             <div className="flex justify-between items-center text-xs font-pixel text-dark">
-              <span>{siswa.sabuk_saat_ini}</span>
+              <span>{activeChild.sabuk_saat_ini}</span>
               <span>Next: {nextBelt}</span>
             </div>
             <div className="h-6 bg-background border-[2px] border-dark overflow-hidden p-0.5">

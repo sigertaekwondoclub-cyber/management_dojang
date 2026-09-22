@@ -21,6 +21,9 @@ export default function OrtuUjianPage() {
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
+  const [targetSesi, setTargetSesi] = useState(12)
+  const [sesiHadir, setSesiHadir] = useState(0)
+
   const fetchRiwayat = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -56,6 +59,21 @@ export default function OrtuUjianPage() {
 
     if (uData) setRiwayat(uData as UjianSabuk[])
 
+    // Hitung sesi latihan hadir sejak ujian terakhir (Target 12 Sesi)
+    const lastExamDate = uData && uData.length > 0 ? new Date(uData[0].tgl_ujian).toISOString().split('T')[0] : null
+    let absQuery = supabase
+      .from('absensi_siswa')
+      .select('id, tgl, status_hadir')
+      .eq('siswa_id', profile.siswa_id)
+      .eq('status_hadir', 'hadir')
+
+    if (lastExamDate) {
+      absQuery = absQuery.gte('tgl', lastExamDate)
+    }
+
+    const { data: absData } = await absQuery
+    setSesiHadir(absData?.length || 0)
+
     setLoading(false)
   }, [supabase])
 
@@ -78,6 +96,9 @@ export default function OrtuUjianPage() {
     )
   }
 
+  const isEligible = sesiHadir >= targetSesi
+  const progressPct = Math.min(100, Math.round((sesiHadir / targetSesi) * 100))
+
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-8">
       <div>
@@ -88,6 +109,38 @@ export default function OrtuUjianPage() {
           </p>
         )}
       </div>
+
+      {/* Target Kelayakan Ujian Sabuk */}
+      <Card className="border-2 border-dark bg-white flex flex-col gap-4">
+        <div className="flex justify-between items-start flex-wrap gap-2">
+          <div>
+            <span className="text-xs font-bold text-dark/50 uppercase tracking-wide">Target Kenaikan Sabuk</span>
+            <h2 className="text-lg font-bold font-sans text-dark mt-0.5">
+              {isEligible ? '🟢 Memenuhi Syarat Ujian Sabuk' : '⏳ Menuju Syarat Ujian Sabuk'}
+            </h2>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold border ${isEligible ? 'bg-green-100 text-green-800 border-green-300' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}>
+            {sesiHadir} / {targetSesi} Sesi Latihan
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <div className="w-full bg-dark/10 h-4 rounded-full overflow-hidden border border-dark/20 p-0.5">
+            <div 
+              className={`h-full rounded-full transition-all duration-500 ${isEligible ? 'bg-green-500' : 'bg-primary'}`} 
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-dark/60 font-sans">
+            <span>Progress: <strong>{progressPct}%</strong></span>
+            {isEligible ? (
+              <span className="text-green-700 font-bold">Siap dijadwalkan ujian oleh pelatih! 🥋</span>
+            ) : (
+              <span>Kurang <strong>{targetSesi - sesiHadir} sesi</strong> lagi untuk memenuhi syarat</span>
+            )}
+          </div>
+        </div>
+      </Card>
 
       <Card className="bg-dark text-white border-dark">
         <div className="flex items-center justify-between">

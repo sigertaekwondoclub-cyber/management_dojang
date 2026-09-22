@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
+import { useOrtuChild } from '@/context/OrtuChildContext'
+import type { PenilaianAtlet } from '@/lib/types'
 
 const supabase = createClient()
 
@@ -18,42 +20,29 @@ export default function OrtuLaporanPage() {
   const [filterBulan, setFilterBulan] = useState(String(now.getMonth() + 1).padStart(2, '0'))
   const [filterTahun, setFilterTahun] = useState(String(now.getFullYear()))
   const [loading, setLoading] = useState(true)
-  const [namaSiswa, setNamaSiswa] = useState('')
-  const [siswaId, setSiswaId] = useState<string | null>(null)
+  const { activeChild, loading: childLoading } = useOrtuChild()
+
   const [absensi, setAbsensi] = useState({ hadir: 0, izin: 0, sakit: 0, alpha: 0, total: 0, persen: 0 })
   const [iuran, setIuran] = useState<{ status_bayar: string; nominal: number } | null>(null)
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: profile } = await supabase
-        .from('profiles').select('siswa_id, nama').eq('id', user.id).single()
-      if (profile?.siswa_id) {
-        setSiswaId(profile.siswa_id)
-        const { data: siswaData } = await supabase
-          .from('siswa').select('nama').eq('id', profile.siswa_id).single()
-        setNamaSiswa(siswaData?.nama || profile.nama || '')
-      } else {
-        setNamaSiswa(profile?.nama || '')
-        setLoading(false)
-      }
-    }
-    fetchProfile()
-  }, [])
+  const [raport, setRaport] = useState<PenilaianAtlet | null>(null)
 
   const fetchData = useCallback(async () => {
-    if (!siswaId) return
+    if (!activeChild?.id) {
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const bul = parseInt(filterBulan)
     const tah = parseInt(filterTahun)
     const lastDay = new Date(tah, bul, 0).getDate()
+    const startTgl = `${tah}-${filterBulan}-01`
     const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
 
+    // 1. Fetch Absensi
     const { data: absensiRows } = await supabase
       .from('absensi_siswa').select('status_hadir')
-      .eq('siswa_id', siswaId)
-      .gte('tgl', `${tah}-${filterBulan}-01`)
+      .eq('siswa_id', activeChild.id)
+      .gte('tgl', startTgl)
       .lte('tgl', endTgl)
     const rows = absensiRows || []
     const hadir = rows.filter(r => r.status_hadir === 'hadir').length
@@ -62,25 +51,71 @@ export default function OrtuLaporanPage() {
     const alpha = rows.filter(r => r.status_hadir === 'alpha').length
     const total = rows.length
     setAbsensi({ hadir, izin, sakit, alpha, total, persen: total > 0 ? Math.round(hadir / total * 100) : 0 })
+
+    // 2. Fetch Iuran
     const { data: iuranData } = await supabase
       .from('iuran').select('status_bayar, nominal')
-      .eq('siswa_id', siswaId)
-      .eq('bulan', parseInt(filterBulan))
+      .eq('siswa_id', activeChild.id)
+      .eq('bulan', bul)
       .eq('tahun', tah)
       .maybeSingle()
     setIuran(iuranData)
-    setLoading(false)
-  }, [siswaId, filterBulan, filterTahun])
 
-  useEffect(() => { if (siswaId) fetchData() }, [fetchData, siswaId])
+    // 3. Fetch Raport Penilaian Atlet
+    const { data: raportData } = await supabase
+      .from('penilaian_atlet')
+      .select('*')
+      .eq('siswa_id', activeChild.id)
+      .eq('periode_bulan', bul)
+      .eq('periode_tahun', tah)
+      .maybeSingle()
+    setRaport((raportData as PenilaianAtlet) || null)
+
+    setLoading(false)
+  }, [activeChild, filterBulan, filterTahun])
+
+  useEffect(() => {
+    if (activeChild) {
+      fetchData()
+    } else if (!childLoading) {
+      setLoading(false)
+    }
+  }, [fetchData, activeChild, childLoading])
 
   const handleShareWA = () => {
+    if (!activeChild) return
     const bul = BULAN_NAMES[parseInt(filterBulan)]
     const statusLabel: Record<string, string> = {
       lunas: '✅ LUNAS', belum_bayar: '❌ BELUM BAYAR',
       menunggu_verifikasi: '🔍 MENUNGGU VERIFIKASI', ditolak: '❌ DITOLAK'
     }
-    const teks = `📊 *REKAP SIGER TAEKWONDO*\n👤 *${namaSiswa}*\n📅 Periode: ${bul} ${filterTahun}\n\n✅ *KEHADIRAN LATIHAN*\n• Hadir: ${absensi.hadir}x dari ${absensi.total} sesi${absensi.total > 0 ? ` (${absensi.persen}%)` : ''}\n• Izin: ${absensi.izin}x | Sakit: ${absensi.sakit}x | Alpha: ${absensi.alpha}x\n\n💰 *STATUS IURAN*\n• ${bul} ${filterTahun}: ${iuran ? (statusLabel[iuran.status_bayar] || iuran.status_bayar) : '❌ BELUM ADA DATA'}${iuran?.nominal ? ` (${formatRupiah(iuran.nominal)})` : ''}\n\nSiger Taekwondo Club 🥋`
+    
+    let teks = `📊 *RAPORT & REKAP PERKEMBANGAN SIGER TAEKWONDO*\n`
+    teks += `👤 *${activeChild.nama}* (Sabuk ${activeChild.sabuk_saat_ini})\n`
+    teks += `📅 Periode: ${bul} ${filterTahun}\n\n`
+
+    teks += `✅ *KEHADIRAN LATIHAN*\n`
+    teks += `• Hadir: ${absensi.hadir}x dari ${absensi.total} sesi${absensi.total > 0 ? ` (${absensi.persen}%)` : ''}\n`
+    teks += `• Izin: ${absensi.izin}x | Sakit: ${absensi.sakit}x | Alpha: ${absensi.alpha}x\n\n`
+
+    if (raport) {
+      const avg = Math.round((raport.nilai_fisik + raport.nilai_kyorugi + raport.nilai_poomsae + raport.nilai_disiplin) / 4)
+      teks += `🥋 *EVALUASI PELATIH (Skor Rata-Rata: ${avg}/100)*\n`
+      teks += `• Fisik & Stamina: ${raport.nilai_fisik}/100\n`
+      teks += `• Kyorugi (Tarung): ${raport.nilai_kyorugi}/100\n`
+      teks += `• Poomsae (Jurus): ${raport.nilai_poomsae}/100\n`
+      teks += `• Disiplin & Sikap: ${raport.nilai_disiplin}/100\n`
+      teks += `• Rekomendasi: ${raport.rekomendasi.toUpperCase()}\n`
+      if (raport.catatan_pelatih) {
+        teks += `• Catatan: "${raport.catatan_pelatih}"\n`
+      }
+      teks += `\n`
+    }
+
+    teks += `💰 *STATUS IURAN*\n`
+    teks += `• ${bul} ${filterTahun}: ${iuran ? (statusLabel[iuran.status_bayar] || iuran.status_bayar) : '❌ BELUM ADA DATA'}${iuran?.nominal ? ` (${formatRupiah(iuran.nominal)})` : ''}\n\n`
+    teks += `_Siger Taekwondo Club 🥋_`
+
     window.open(`https://wa.me/?text=${encodeURIComponent(teks)}`, '_blank')
   }
 
@@ -91,12 +126,27 @@ export default function OrtuLaporanPage() {
     ditolak: { label: '❌ Ditolak', cls: 'text-red-600 bg-red-50 border-red-200' },
   }
 
+  const getScoreColor = (score: number) => {
+    if (score >= 85) return 'bg-green-500 text-green-700'
+    if (score >= 70) return 'bg-blue-500 text-blue-700'
+    if (score >= 50) return 'bg-yellow-500 text-yellow-700'
+    return 'bg-red-500 text-red-700'
+  }
+
+  if (childLoading) {
+    return <div className="p-8 text-center text-dark/50 font-pixel text-sm">Memuat profil anak...</div>
+  }
+
+  if (!activeChild) {
+    return <div className="p-8 text-center text-dark font-pixel text-sm">Akun Anda belum ditautkan ke data anak/siswa.</div>
+  }
+
   return (
     <div className="max-w-2xl mx-auto flex flex-col gap-6 pb-10">
       <div>
-        <h1 className="text-3xl font-bold font-sans text-dark">📄 Laporan Perkembangan</h1>
+        <h1 className="text-3xl font-bold font-sans text-dark">📄 Raport & Laporan Perkembangan</h1>
         <p className="text-dark/60 font-sans mt-1">
-          Rekap kehadiran dan iuran {namaSiswa && <b>{namaSiswa}</b>}
+          Rekap kemajuan latihan, evaluasi pelatih, dan iuran <b>{activeChild.nama}</b>
         </p>
       </div>
 
@@ -123,6 +173,66 @@ export default function OrtuLaporanPage() {
         <Card className="text-center py-16 text-dark/50">Memuat data laporan...</Card>
       ) : (
         <>
+          {/* Raport Evaluasi 4 Pilar Pelatih */}
+          <Card className="border-[3px] border-dark">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h2 className="font-bold text-dark text-lg">🥋 Raport Penilaian Atlet</h2>
+                <p className="text-xs text-dark/60 font-sans">Evaluasi berkala oleh tim pelatih dojang</p>
+              </div>
+              {raport && (
+                <span className={`px-3 py-1 text-xs font-bold uppercase rounded-lg border border-dark ${
+                  raport.rekomendasi === 'siap_ujian' ? 'bg-primary text-dark' :
+                  raport.rekomendasi === 'siap_tanding' ? 'bg-secondary text-dark' :
+                  'bg-yellow-100 text-dark'
+                }`}>
+                  {raport.rekomendasi.replace('_', ' ')}
+                </span>
+              )}
+            </div>
+
+            {!raport ? (
+              <div className="p-6 bg-background border-2 border-dashed border-dark/20 text-center rounded-xl">
+                <p className="text-sm font-bold text-dark/60">Belum ada raport penilaian pelatih untuk periode ini.</p>
+                <p className="text-xs text-dark/40 mt-1">Pelatih akan menginput evaluasi fisik, teknik, dan disiplin secara berkala.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-5">
+                {/* 4 Pillars Progress */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { label: '💪 Fisik & Stamina', score: raport.nilai_fisik },
+                    { label: '🥊 Kyorugi (Tarung)', score: raport.nilai_kyorugi },
+                    { label: '🥋 Poomsae (Jurus)', score: raport.nilai_poomsae },
+                    { label: '⭐ Disiplin & Sikap', score: raport.nilai_disiplin },
+                  ].map(pillar => (
+                    <div key={pillar.label} className="p-3 bg-background border-2 border-dark/10 rounded-xl flex flex-col gap-1.5">
+                      <div className="flex justify-between items-center text-xs font-bold text-dark">
+                        <span>{pillar.label}</span>
+                        <span className="font-mono text-sm">{pillar.score} / 100</span>
+                      </div>
+                      <div className="h-3 bg-white border border-dark/20 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${getScoreColor(pillar.score).split(' ')[0]}`}
+                          style={{ width: `${pillar.score}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Catatan Pelatih */}
+                {raport.catatan_pelatih && (
+                  <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                    <p className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-1">📝 Catatan Pelatih:</p>
+                    <p className="text-sm text-dark font-sans italic">"{raport.catatan_pelatih}"</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* Kehadiran */}
           <Card>
             <h2 className="font-bold text-dark text-lg mb-4">📅 Kehadiran Latihan — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
             {absensi.total === 0 ? (
@@ -163,6 +273,7 @@ export default function OrtuLaporanPage() {
             )}
           </Card>
 
+          {/* Iuran */}
           <Card>
             <h2 className="font-bold text-dark text-lg mb-4">💰 Status Iuran — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</h2>
             {!iuran ? (
@@ -182,7 +293,7 @@ export default function OrtuLaporanPage() {
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
             </svg>
-            Bagikan Laporan via WhatsApp
+            Bagikan Raport & Laporan via WhatsApp
           </button>
         </>
       )}

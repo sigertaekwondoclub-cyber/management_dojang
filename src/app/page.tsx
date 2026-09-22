@@ -13,6 +13,7 @@ export default function Home() {
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
   const [siswaAktif, setSiswaAktif] = useState<number>(0);
   const [pelatihAktif, setPelatihAktif] = useState<number>(0);
+  const [topDisiplin, setTopDisiplin] = useState<{ nama: string; sabuk: string; totalHadir: number }[]>([]);
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function Home() {
         const data = await res.json();
         setSiswaAktif(data.siswaAktif ?? 0);
         setPelatihAktif(data.pelatihAktif ?? 0);
+        setTopDisiplin(data.topDisiplin || []);
       } catch {
         // fallback: keep 0
       } finally {
@@ -294,6 +296,50 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* === TOP DISCIPLINE / HALL OF FAME === */}
+      {topDisiplin.length > 0 && (
+        <section className="z-10 px-4 sm:px-8 py-12 bg-white border-y-[4px] border-dark w-full">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <span className="font-pixel text-xs bg-primary border-2 border-dark px-2 py-1 shadow-[2px_2px_0px_#1E2A38] uppercase inline-block mb-2">
+                🏆 Leaderboard Kehadiran
+              </span>
+              <h2 className="font-pixel text-2xl sm:text-3xl text-dark">
+                HALL OF FAME: ATLET PALING DISIPLIN
+              </h2>
+              <p className="font-sans text-sm text-dark/70 mt-1">
+                Apresiasi untuk atlet dengan dedikasi latihan dan presensi tertinggi bulan ini
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {topDisiplin.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`p-4 border-[3px] border-dark bg-[#FDF6EC] shadow-[4px_4px_0px_#1E2A38] flex items-center gap-3 relative ${
+                    idx === 0 ? 'sm:col-span-2 md:col-span-1 bg-gradient-to-br from-yellow-100 to-yellow-50' : ''
+                  }`}
+                >
+                  <div className={`w-10 h-10 border-2 border-dark flex items-center justify-center font-pixel text-base shrink-0 shadow-[2px_2px_0px_#1E2A38] ${
+                    idx === 0 ? 'bg-yellow-400 text-dark font-bold' : idx === 1 ? 'bg-slate-300 text-dark' : idx === 2 ? 'bg-amber-600 text-white' : 'bg-white text-dark'
+                  }`}>
+                    #{idx + 1}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-pixel text-sm text-dark truncate">{item.nama}</p>
+                    <p className="font-sans text-xs text-dark/60 mt-0.5">Sabuk: <b className="text-dark">{item.sabuk}</b></p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-pixel text-lg text-primary">{item.totalHadir}x</span>
+                    <span className="block font-pixel text-[9px] text-dark/50 uppercase">Hadir</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* === LOKASI LATIHAN === */}
       <section id="lokasi" className="z-10 px-4 sm:px-8 py-16 bg-secondary/10 border-y-[4px] border-dark w-full">

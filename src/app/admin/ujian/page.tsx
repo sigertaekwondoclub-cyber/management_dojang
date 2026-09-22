@@ -35,6 +35,9 @@ export default function AdminUjianSabukPage() {
   const [evalHasil, setEvalHasil] = useState<'lulus' | 'tidak_lulus' | null>(null)
   const [evalCatatan, setEvalCatatan] = useState('')
 
+  const TARGET_SESI_UJIAN = 12
+  const [siswaHadirMap, setSiswaHadirMap] = useState<Record<string, number>>({})
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     
@@ -55,6 +58,33 @@ export default function AdminUjianSabukPage() {
     
     if (sData) setSiswaList(sData as Siswa[])
 
+    // Fetch Absensi Siswa (Hadir) untuk menghitung kelayakan ujian (Target 12 Sesi)
+    const { data: absData } = await supabase
+      .from('absensi_siswa')
+      .select('siswa_id, tgl, status_hadir')
+      .eq('status_hadir', 'hadir')
+
+    const hadirMap: Record<string, number> = {}
+    if (sData && absData) {
+      for (const s of sData) {
+        // Cari tanggal ujian lulus terakhir jika ada
+        const lastPassedExam = (uData || [])
+          .filter(u => u.siswa_id === s.id && u.hasil === 'lulus')
+          .sort((a, b) => new Date(b.tgl_ujian).getTime() - new Date(a.tgl_ujian).getTime())[0]
+
+        const lastExamDate = lastPassedExam?.tgl_ujian ? new Date(lastPassedExam.tgl_ujian).toISOString().split('T')[0] : null
+
+        const studentAbsensi = absData.filter(a => {
+          if (a.siswa_id !== s.id) return false
+          if (lastExamDate) return a.tgl >= lastExamDate
+          return true
+        })
+
+        hadirMap[s.id] = studentAbsensi.length
+      }
+    }
+    setSiswaHadirMap(hadirMap)
+
     setLoading(false)
   }, [supabase])
 
@@ -66,6 +96,18 @@ export default function AdminUjianSabukPage() {
     setSelectedSiswaIds(prev => 
       prev.includes(siswaId) ? prev.filter(id => id !== siswaId) : [...prev, siswaId]
     )
+  }
+
+  const handleSelectEligibleStudents = () => {
+    const eligibleIds = siswaList
+      .filter(s => {
+        const targetBelt = getNextBelt(s.sabuk_saat_ini)
+        const isMaxBelt = s.sabuk_saat_ini === targetBelt
+        const count = siswaHadirMap[s.id] || 0
+        return !isMaxBelt && count >= TARGET_SESI_UJIAN
+      })
+      .map(s => s.id)
+    setSelectedSiswaIds(eligibleIds)
   }
 
   const handleJadwalkan = async (e: React.FormEvent) => {
@@ -152,7 +194,7 @@ export default function AdminUjianSabukPage() {
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold font-sans text-dark">🏅 Manajemen Ujian Sabuk</h1>
-          <p className="text-dark/60 font-sans mt-1">Jadwalkan ujian dan input hasil kelulusan</p>
+          <p className="text-dark/60 font-sans mt-1">Jadwalkan ujian kenaikan tingkat dan input hasil evaluasi</p>
         </div>
         <Button variant="primary" onClick={() => setIsFormOpen(!isFormOpen)}>
           {isFormOpen ? 'Batal' : '➕ Jadwalkan Ujian'}
@@ -161,7 +203,12 @@ export default function AdminUjianSabukPage() {
       
       {isFormOpen && (
         <Card className="border-primary border-2 bg-primary/5">
-          <h2 className="text-xl font-bold font-sans text-dark mb-4">Buat Jadwal Ujian Baru</h2>
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+            <h2 className="text-xl font-bold font-sans text-dark">Buat Jadwal Ujian Baru</h2>
+            <div className="text-xs bg-white px-3 py-1.5 rounded-xl border border-dark/20 font-bold font-sans text-dark">
+              🎯 Syarat Kelayakan: <span className="text-green-700">Minimal {TARGET_SESI_UJIAN} Sesi Latihan</span>
+            </div>
+          </div>
           {formError && <div className="mb-4 p-3 bg-accent/20 text-accent font-bold rounded-xl text-sm border border-accent">{formError}</div>}
           
           <form onSubmit={handleJadwalkan} className="flex flex-col gap-6">
@@ -171,27 +218,53 @@ export default function AdminUjianSabukPage() {
             </div>
 
             <div>
-              <label className="font-bold text-dark font-sans text-sm mb-2 block">Pilih Peserta Ujian ({selectedSiswaIds.length} dipilih)</label>
-              <div className="max-h-64 overflow-y-auto border-2 border-dark/20 rounded-xl bg-white p-2 flex flex-col gap-1">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <label className="font-bold text-dark font-sans text-sm block">
+                  Pilih Peserta Ujian ({selectedSiswaIds.length} dipilih)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSelectEligibleStudents}
+                  className="text-xs font-bold text-green-800 bg-green-100 hover:bg-green-200 border border-green-400 px-3 py-1 rounded-xl transition-colors"
+                >
+                  ⚡ Pilih Semua Siswa Memenuhi Syarat (≥ 12 Sesi)
+                </button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto border-2 border-dark/20 rounded-xl bg-white p-2 flex flex-col gap-1.5">
                 {siswaList.map(siswa => {
                   const targetBelt = getNextBelt(siswa.sabuk_saat_ini)
                   const isMaxBelt = siswa.sabuk_saat_ini === targetBelt
+                  const countHadir = siswaHadirMap[siswa.id] || 0
+                  const isEligible = countHadir >= TARGET_SESI_UJIAN
+
                   return (
-                    <label key={siswa.id} className="flex items-center gap-3 p-3 hover:bg-background rounded-lg cursor-pointer transition-colors border-b border-dark/5 last:border-0">
+                    <label key={siswa.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors border ${selectedSiswaIds.includes(siswa.id) ? 'bg-primary/10 border-primary' : 'hover:bg-background border-dark/10'}`}>
                       <input 
                         type="checkbox" 
-                        className="w-5 h-5 accent-primary border-2 border-dark"
+                        className="w-5 h-5 accent-primary border-2 border-dark shrink-0"
                         checked={selectedSiswaIds.includes(siswa.id)}
                         onChange={() => toggleSiswaSelection(siswa.id)}
                         disabled={isMaxBelt}
                       />
-                      <div className="flex-1">
-                        <div className="font-bold font-sans text-dark">{siswa.nama}</div>
-                        <div className="text-xs text-dark/60 font-sans">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold font-sans text-dark">{siswa.nama}</span>
+                          {isEligible ? (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-300">
+                              🟢 Siap Ujian ({countHadir}/{TARGET_SESI_UJIAN} Sesi)
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-yellow-100 text-yellow-800 border border-yellow-300">
+                              🟡 Belum Memenuhi ({countHadir}/{TARGET_SESI_UJIAN} Sesi)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-dark/60 font-sans mt-0.5">
                           {isMaxBelt ? (
                             <span className="text-accent font-bold">Sudah sabuk tertinggi ({siswa.sabuk_saat_ini})</span>
                           ) : (
-                            <span>Akan ujian: {siswa.sabuk_saat_ini} → <span className="font-bold text-dark">{targetBelt}</span></span>
+                            <span>Target Kenaikan: {siswa.sabuk_saat_ini} → <strong className="text-dark">{targetBelt}</strong></span>
                           )}
                         </div>
                       </div>

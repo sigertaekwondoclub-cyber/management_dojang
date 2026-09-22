@@ -1,17 +1,58 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { NavigationProgress } from '@/components/ui/NavigationProgress'
 import { KeranjangProvider } from '@/context/KeranjangContext'
+import { OrtuChildProvider, useOrtuChild } from '@/context/OrtuChildContext'
 
-// Instance di luar komponen agar stabil
 const supabase = createClient()
 
-export default function OrtuLayout({ children }: { children: React.ReactNode }) {
+function ChildSwitcher() {
+  const { activeChild, childrenList, setActiveChildId } = useOrtuChild()
+
+  if (!activeChild || childrenList.length <= 1) {
+    if (activeChild) {
+      return (
+        <div className="mb-4 p-2.5 bg-primary/10 border-2 border-dark rounded-xl">
+          <span className="text-[10px] font-bold text-dark/60 font-sans block uppercase">Siswa Terhubung</span>
+          <div className="font-bold text-dark font-sans text-xs truncate mt-0.5">{activeChild.nama}</div>
+          <div className="text-[10px] text-dark/70 font-sans">
+            Sabuk {activeChild.sabuk_saat_ini} · {(activeChild.program_kelas as any)?.nama_program || 'Umum'}
+          </div>
+        </div>
+      )
+    }
+    return null
+  }
+
+  return (
+    <div className="mb-4 p-2.5 bg-secondary/15 border-2 border-dark rounded-xl flex flex-col gap-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-[10px] font-bold text-dark/70 font-sans uppercase">Pilih Profil Anak:</span>
+        <span className="text-[9px] bg-secondary px-1.5 py-0.2 rounded font-bold border border-dark">
+          {childrenList.length} Anak
+        </span>
+      </div>
+      <select
+        value={activeChild.id}
+        onChange={e => setActiveChildId(e.target.value)}
+        className="w-full bg-white border-2 border-dark rounded-lg px-2 py-1.5 text-xs font-bold font-sans text-dark focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+      >
+        {childrenList.map(c => (
+          <option key={c.id} value={c.id}>
+            🥋 {c.nama} ({c.sabuk_saat_ini})
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function OrtuLayoutInner({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
   const [nama, setNama] = useState('')
@@ -70,7 +111,7 @@ export default function OrtuLayout({ children }: { children: React.ReactNode }) 
     { label: '🪪 Kartu Anggota', path: '/ortu/kartu' },
     { label: '🛒 Toko Merchant', path: '/ortu/merchant' },
     { label: '📦 Pesanan Saya', path: '/ortu/merchant/pesanan' },
-    { label: '📄 Laporan Saya', path: '/ortu/laporan' },
+    { label: '📄 Laporan & Raport', path: '/ortu/laporan' },
   ]
 
   // Main items for the bottom navigation bar on mobile
@@ -84,70 +125,83 @@ export default function OrtuLayout({ children }: { children: React.ReactNode }) 
         <NavigationProgress />
 
         {/* MOBILE HEADER */}
-        <header className="md:hidden flex items-center justify-between bg-white border-b-[3px] border-dark px-6 py-3 sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
+        <header className="md:hidden flex items-center justify-between bg-white border-b-[3px] border-dark px-4 py-2.5 sticky top-0 z-30">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-8 h-8 bg-white border-[2px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
               <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
             </div>
-            <div>
-              <h2 className="text-base font-pixel text-dark leading-tight">Portal Ortu</h2>
-              <p className="text-[10px] text-dark/60 font-sans truncate max-w-[150px]">{nama}</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xs font-pixel text-dark leading-tight">Portal Ortu</h2>
+              <p className="text-[10px] text-dark/60 font-sans truncate">{nama}</p>
             </div>
+          </div>
+          <div className="w-44 shrink-0">
+            <ChildSwitcher />
           </div>
         </header>
 
         {/* DESKTOP SIDEBAR */}
-        <aside className="hidden md:flex w-64 bg-white border-r-[4px] border-dark p-5 flex-col">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b-[3px] border-dark">
-            <div className="w-11 h-11 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
-              <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
+        <aside className="w-64 bg-white border-r-[4px] border-dark p-6 hidden md:flex flex-col justify-between shrink-0 h-screen sticky top-0">
+          <div className="overflow-y-auto pr-1">
+            <div className="flex items-center gap-3 mb-6 border-b-[3px] border-dark pb-4">
+              <div className="w-12 h-12 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
+                <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-pixel text-dark leading-tight truncate">Portal Ortu</h2>
+                <p className="text-xs text-dark/60 font-sans truncate mt-0.5">{nama || 'Wali Murid'}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-pixel text-dark leading-tight">Portal Ortu</h2>
-              <p className="text-[10px] text-dark/60 font-sans mt-0.5 truncate max-w-[130px]">{nama}</p>
-            </div>
+
+            {/* Child Switcher Component */}
+            <ChildSwitcher />
+
+            <nav className="flex flex-col gap-1.5 stagger-children">
+              {menu.map((item) => {
+                const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
+                return (
+                  <Link key={item.path} href={item.path}>
+                    <div className={`px-3 py-2.5 border-[2px] font-pixel transition-all duration-75 cursor-pointer text-xs ${
+                      isActive
+                        ? 'bg-accent border-dark shadow-[3px_3px_0px_#1E2A38]'
+                        : 'bg-white border-transparent hover:border-dark hover:bg-background'
+                    }`}>
+                      {item.label}
+                    </div>
+                  </Link>
+                )
+              })}
+            </nav>
           </div>
-          <nav className="flex flex-col gap-1.5 flex-1">
-            {menu.map((item) => {
-              const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
-              return (
-                <Link key={item.path} href={item.path} prefetch={true}>
-                  <div className={`px-3 py-2 border-[2px] font-pixel transition-all duration-75 cursor-pointer text-xs ${
-                    isActive
-                    ? 'bg-accent border-dark shadow-[3px_3px_0px_#1E2A38] translate-x-[-2px] translate-y-[-2px]'
-                    : 'bg-white border-transparent hover:border-dark hover:bg-background'
-                  }`}>
-                    {item.label}
-                  </div>
-                </Link>
-              )
-            })}
-          </nav>
-          <Button variant="secondary" onClick={handleLogout} className="mt-6 text-sm">⏻ Logout</Button>
+
+          <div className="pt-4 border-t-[3px] border-dark">
+            <Button variant="secondary" onClick={handleLogout} className="w-full text-xs">
+              ⏻ Logout
+            </Button>
+          </div>
         </aside>
 
         {/* MOBILE BOTTOM NAVIGATION BAR */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-[3px] border-dark z-40 flex justify-around items-center py-2 px-2">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t-[3px] border-dark z-30 px-2 py-1 flex items-center justify-around">
           {mobileMainItems.map((item) => {
             const isActive = pathname === item.path || pathname.startsWith(item.path + '/')
-            const labelParts = item.label.split(' ')
-            const icon = labelParts[0]
-            const text = labelParts.slice(1).join(' ')
-            
+            const icon = item.label.split(' ')[0]
+            const shortLabel = item.label.split(' ').slice(1).join(' ')
             return (
               <Link key={item.path} href={item.path} className="flex-1 max-w-[80px]">
                 <div className={`flex flex-col items-center gap-0.5 py-1 border-[2px] transition-all duration-75 ${
                   isActive
-                  ? 'bg-accent/30 border-dark shadow-[2px_2px_0px_#1E2A38]'
-                  : 'border-transparent'
+                    ? 'bg-accent border-dark shadow-[2px_2px_0px_#1E2A38]'
+                    : 'border-transparent'
                 }`}>
                   <span className="text-lg">{icon}</span>
-                  <span className="text-[8px] font-pixel text-dark truncate w-full text-center">{text}</span>
+                  <span className="text-[8px] font-pixel text-dark truncate max-w-[64px]">{shortLabel}</span>
                 </div>
               </Link>
             )
           })}
-          {/* Lainnya Toggle Button */}
+          
+          {/* 'Lainnya' Button to open bottom drawer */}
           <button 
             onClick={() => setIsDrawerOpen(true)}
             className={`flex-1 max-w-[80px] flex flex-col items-center gap-0.5 py-1 border-[2px] transition-all duration-75 ${
@@ -207,9 +261,17 @@ export default function OrtuLayout({ children }: { children: React.ReactNode }) 
             {children}
           </div>
         </main>
-
-        {/* pageEnter keyframes are now in globals.css */}
       </div>
     </KeranjangProvider>
+  )
+}
+
+export default function OrtuLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <OrtuChildProvider>
+      <OrtuLayoutInner>
+        {children}
+      </OrtuLayoutInner>
+    </OrtuChildProvider>
   )
 }
