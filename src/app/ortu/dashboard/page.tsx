@@ -226,12 +226,14 @@ export default function OrtuDashboardPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xl">📊</span>
                 <h3 className="font-pixel text-base text-dark">Raport Evaluasi Pelatih</h3>
-                <span className="px-2 py-0.5 bg-primary border border-dark text-[10px] font-bold uppercase rounded">
-                  {raportTerbaru.rekomendasi.replace('_', ' ')}
-                </span>
+                {raportTerbaru.rekomendasi && (
+                  <span className="px-2 py-0.5 bg-primary border border-dark text-[10px] font-bold uppercase rounded">
+                    {raportTerbaru.rekomendasi.replace('_', ' ')}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-dark/70 font-sans mt-1">
-                Skor Rata-Rata: <b className="text-dark font-mono text-sm">{Math.round((raportTerbaru.nilai_fisik + raportTerbaru.nilai_kyorugi + raportTerbaru.nilai_poomsae + raportTerbaru.nilai_disiplin) / 4)}/100</b>
+                Skor Rata-Rata: <b className="text-dark font-mono text-sm">{Math.round((raportTerbaru.skor_fisik + raportTerbaru.skor_kyorugi + raportTerbaru.skor_poomsae + raportTerbaru.skor_disiplin) / 4)}/100</b>
                 {raportTerbaru.catatan_pelatih && <span> • <i>"{raportTerbaru.catatan_pelatih}"</i></span>}
               </p>
             </div>

@@ -99,13 +99,15 @@ export default function OrtuLaporanPage() {
     teks += `• Izin: ${absensi.izin}x | Sakit: ${absensi.sakit}x | Alpha: ${absensi.alpha}x\n\n`
 
     if (raport) {
-      const avg = Math.round((raport.nilai_fisik + raport.nilai_kyorugi + raport.nilai_poomsae + raport.nilai_disiplin) / 4)
+      const avg = Math.round((raport.skor_fisik + raport.skor_kyorugi + raport.skor_poomsae + raport.skor_disiplin) / 4)
       teks += `🥋 *EVALUASI PELATIH (Skor Rata-Rata: ${avg}/100)*\n`
-      teks += `• Fisik & Stamina: ${raport.nilai_fisik}/100\n`
-      teks += `• Kyorugi (Tarung): ${raport.nilai_kyorugi}/100\n`
-      teks += `• Poomsae (Jurus): ${raport.nilai_poomsae}/100\n`
-      teks += `• Disiplin & Sikap: ${raport.nilai_disiplin}/100\n`
-      teks += `• Rekomendasi: ${raport.rekomendasi.toUpperCase()}\n`
+      teks += `• Fisik & Stamina: ${raport.skor_fisik}/100\n`
+      teks += `• Kyorugi (Tarung): ${raport.skor_kyorugi}/100\n`
+      teks += `• Poomsae (Jurus): ${raport.skor_poomsae}/100\n`
+      teks += `• Disiplin & Sikap: ${raport.skor_disiplin}/100\n`
+      if (raport.rekomendasi) {
+        teks += `• Rekomendasi: ${raport.rekomendasi.toUpperCase()}\n`
+      }
       if (raport.catatan_pelatih) {
         teks += `• Catatan: "${raport.catatan_pelatih}"\n`
       }
@@ -180,7 +182,7 @@ export default function OrtuLaporanPage() {
                 <h2 className="font-bold text-dark text-lg">🥋 Raport Penilaian Atlet</h2>
                 <p className="text-xs text-dark/60 font-sans">Evaluasi berkala oleh tim pelatih dojang</p>
               </div>
-              {raport && (
+              {raport?.rekomendasi && (
                 <span className={`px-3 py-1 text-xs font-bold uppercase rounded-lg border border-dark ${
                   raport.rekomendasi === 'siap_ujian' ? 'bg-primary text-dark' :
                   raport.rekomendasi === 'siap_tanding' ? 'bg-secondary text-dark' :
@@ -201,10 +203,10 @@ export default function OrtuLaporanPage() {
                 {/* 4 Pillars Progress */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {[
-                    { label: '💪 Fisik & Stamina', score: raport.nilai_fisik },
-                    { label: '🥊 Kyorugi (Tarung)', score: raport.nilai_kyorugi },
-                    { label: '🥋 Poomsae (Jurus)', score: raport.nilai_poomsae },
-                    { label: '⭐ Disiplin & Sikap', score: raport.nilai_disiplin },
+                    { label: '💪 Fisik & Stamina', score: raport.skor_fisik },
+                    { label: '🥊 Kyorugi (Tarung)', score: raport.skor_kyorugi },
+                    { label: '🥋 Poomsae (Jurus)', score: raport.skor_poomsae },
+                    { label: '⭐ Disiplin & Sikap', score: raport.skor_disiplin },
                   ].map(pillar => (
                     <div key={pillar.label} className="p-3 bg-background border-2 border-dark/10 rounded-xl flex flex-col gap-1.5">
                       <div className="flex justify-between items-center text-xs font-bold text-dark">

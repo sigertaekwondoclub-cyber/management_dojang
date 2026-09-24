@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Baloo_2, Inter, Pixelify_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -17,11 +17,14 @@ const pixelify = Pixelify_Sans({
   variable: "--font-pixelify",
 });
 
+export const viewport: Viewport = {
+  themeColor: '#22C55E',
+};
+
 export const metadata: Metadata = {
   title: 'Siger Taekwondo Club',
   description: 'Sistem Manajemen Klub Taekwondo Siger',
   manifest: '/manifest.json',
-  themeColor: '#22C55E',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
