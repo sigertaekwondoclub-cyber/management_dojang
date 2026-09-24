@@ -76,7 +76,7 @@ export default function AdminDashboardPage() {
       supabase.from('keuangan_club').select('jenis, nominal').gte('tgl', startBulan),
       // Honor sudah dibayar: dari payroll_details dengan status_dibayar = true
       payrollRunId
-        ? supabase.from('payroll_details').select('total_payout').eq('payroll_run_id', payrollRunId).eq('status_dibayar', true)
+        ? supabase.from('payroll_details').select('total_payout, potongan_kasbon, honor_bersih').eq('payroll_run_id', payrollRunId).eq('status_dibayar', true)
         : Promise.resolve({ data: [] }),
       supabase.from('ujian_sabuk').select('tgl_ujian').gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
       supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1),
@@ -91,7 +91,7 @@ export default function AdminDashboardPage() {
       supabase.from('absensi_siswa').select('siswa_id, siswa:siswa_id(nama)').eq('status_hadir', 'alpha').gte('tgl', startBulan).lte('tgl', today),
       // Honor belum dibayar: dari payroll_details dengan status_dibayar = false
       payrollRunId
-        ? supabase.from('payroll_details').select('total_payout').eq('payroll_run_id', payrollRunId).eq('status_dibayar', false)
+        ? supabase.from('payroll_details').select('total_payout, potongan_kasbon, honor_bersih').eq('payroll_run_id', payrollRunId).eq('status_dibayar', false)
         : Promise.resolve({ data: [] }),
     ])
 
@@ -112,8 +112,13 @@ export default function AdminDashboardPage() {
       if (c.jenis === 'income') income += Number(c.nominal)
       if (c.jenis === 'expense') expense += Number(c.nominal)
     })
-    // Honor sudah dibayar dihitung dari payroll_details (total_payout)
-    honorResult.data?.forEach((h: any) => { expense += Number(h.total_payout) })
+    // Honor sudah dibayar dihitung dari payroll_details (honor_bersih yang keluar kas)
+    honorResult.data?.forEach((h: any) => {
+      const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+        ? Number(h.honor_bersih)
+        : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+      expense += net
+    })
 
     setStats({ siswaAktif, pelatihAktif: pelatihAktif || 0, iuranTotal, iuranTerkumpul, tagihanMenunggu, daftarBaru, pesananMerchantMenunggu: merchantMenungguResult.count || 0, merchantPemasukan, income, expense })
     setUjianMendatang(ujianResult.data?.[0] || null)
@@ -180,7 +185,12 @@ export default function AdminDashboardPage() {
     setPayrollGenerated(payrollRunId !== null)
     setHonorBelumBayar({
       count: hbData.length,
-      total: hbData.reduce((acc: number, h: any) => acc + Number(h.total_payout), 0),
+      total: hbData.reduce((acc: number, h: any) => {
+        const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+          ? Number(h.honor_bersih)
+          : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+        return acc + net
+      }, 0),
     })
 
     setLoading(false)

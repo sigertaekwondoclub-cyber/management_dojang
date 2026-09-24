@@ -398,7 +398,8 @@ export default function AdminLaporanPage() {
       const pr = keuanganData[0]?.payrollRun
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
-        rows.push(['Pengeluaran', 'Honor Pelatih', `Honor ${d.pelatih?.nama || 'Pelatih'}`, d.total_payout])
+        const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+        rows.push(['Pengeluaran', 'Honor Pelatih', `Honor ${d.pelatih?.nama || 'Pelatih'}${Number(d.potongan_kasbon || 0) > 0 ? ' (Bersih)' : ''}`, net])
       })
 
       downloadCSV(`laporan-keuangan-${bul}-${filterTahun}.csv`, rows, ['Jenis', 'Kategori', 'Keterangan', 'Nominal (Rp)'])
@@ -423,8 +424,11 @@ export default function AdminLaporanPage() {
       if (!run) return
       downloadCSV(`honor-pelatih-${bul}-${filterTahun}.csv`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (run.payroll_details || []).map((d: any) => [d.pelatih?.nama || '', d.pelatih?.role || '', d.teaching_honor || 0, d.founder_margin_share || 0, d.total_payout || 0, d.sudah_dibayar ? 'Sudah Dibayar' : 'Belum']),
-        ['Nama Pelatih', 'Role', 'Honor Mengajar', 'Founder Share', 'Total Payout', 'Status']
+        (run.payroll_details || []).map((d: any) => {
+          const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+          return [d.pelatih?.nama || '', d.pelatih?.role || '', d.teaching_honor || 0, d.founder_margin_share || 0, d.total_payout || 0, d.potongan_kasbon || 0, net, d.status_dibayar ? 'Sudah Dibayar' : 'Belum']
+        }),
+        ['Nama Pelatih', 'Role', 'Honor Mengajar', 'Founder Share', 'Honor Kotor', 'Potongan Kasbon', 'Honor Bersih', 'Status']
       )
     }
   }
@@ -575,7 +579,10 @@ export default function AdminLaporanPage() {
   const totalPemasukan = pemasukanIuran + pemasukanMerchant + pemasukanManual
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pengeluaranHonor = (payrollRun?.payroll_details || []).filter((d: any) => d.status_dibayar).reduce((s: number, d: any) => s + Number(d.total_payout || 0), 0)
+  const pengeluaranHonor = (payrollRun?.payroll_details || []).filter((d: any) => d.status_dibayar).reduce((s: number, d: any) => {
+    const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+    return s + net
+  }, 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pengeluaranManual = transaksiRows.filter((r: any) => r.jenis === 'expense').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   const totalPengeluaran = pengeluaranHonor + pengeluaranManual
@@ -1145,24 +1152,31 @@ export default function AdminLaporanPage() {
                               <th className="text-left py-2 text-dark/60 font-bold">Pelatih</th>
                               <th className="text-right py-2 text-dark/60 font-bold">Honor Mengajar</th>
                               <th className="text-right py-2 text-dark/60 font-bold">Founder Share</th>
-                              <th className="text-right py-2 text-dark/60 font-bold">Total Payout</th>
+                              <th className="text-right py-2 text-dark/60 font-bold">Honor Kotor</th>
+                              <th className="text-right py-2 text-dark/60 font-bold">Potongan</th>
+                              <th className="text-right py-2 text-dark/60 font-bold">Honor Bersih</th>
                               <th className="text-center py-2 text-dark/60 font-bold">Status</th>
                             </tr></thead>
                             <tbody>
                               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                              {details.map((d: any, i: number) => (
+                              {details.map((d: any, i: number) => {
+                                const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+                                return (
                                 <tr key={i} className="border-b border-dark/10">
                                   <td className="py-2 font-bold text-dark">{d.pelatih?.nama}</td>
                                   <td className="py-2 text-right">{formatRupiah(d.teaching_honor || 0)}</td>
                                   <td className="py-2 text-right">{formatRupiah(d.founder_margin_share || 0)}</td>
-                                  <td className="py-2 text-right font-bold text-green-700">{formatRupiah(d.total_payout || 0)}</td>
+                                  <td className="py-2 text-right font-medium text-dark">{formatRupiah(d.total_payout || 0)}</td>
+                                  <td className="py-2 text-right font-bold text-red-600">{Number(d.potongan_kasbon || 0) > 0 ? `-${formatRupiah(Number(d.potongan_kasbon))}` : '-'}</td>
+                                  <td className="py-2 text-right font-bold text-green-700">{formatRupiah(net)}</td>
                                   <td className="py-2 text-center">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${d.sudah_dibayar ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                                      {d.sudah_dibayar ? '✅ Dibayar' : '⏳ Belum'}
+                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${d.status_dibayar || d.sudah_dibayar ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                      {d.status_dibayar || d.sudah_dibayar ? '✅ Dibayar' : '⏳ Belum'}
                                     </span>
                                   </td>
                                 </tr>
-                              ))}
+                                )
+                              })}
                             </tbody>
                           </table>
                         </div>

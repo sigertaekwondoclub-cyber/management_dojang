@@ -44,7 +44,7 @@ function formatTgl(tgl: string) {
 // ──────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────
-type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant'
+type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant' | 'kasbon'
 
 interface TransaksiUnified {
   id: string
@@ -77,6 +77,7 @@ const SUMBER_CONFIG: Record<Sumber, { label: string; color: 'primary' | 'seconda
   iuran:    { label: '💰 Iuran',         color: 'primary'   },
   honor:    { label: '🏆 Honor Pelatih', color: 'dark'      },
   merchant: { label: '🛒 Toko Merchant', color: 'accent'    },
+  kasbon:   { label: '💳 Kasbon',        color: 'accent'    },
 }
 
 // ──────────────────────────────────────────
@@ -155,20 +156,25 @@ export default function AdminKeuanganPage() {
     // 3. Honor dibayar — dari payroll_details + payroll_runs (sistem payroll baru)
     const { data: honorData } = await supabase
       .from('payroll_details')
-      .select('id, total_payout, tgl_dibayar, pelatih:pelatih_id(nama), payroll_run:payroll_run_id(bulan, tahun)')
+      .select('id, total_payout, potongan_kasbon, honor_bersih, tgl_dibayar, pelatih:pelatih_id(nama), payroll_run:payroll_run_id(bulan, tahun)')
       .eq('status_dibayar', true)
       .order('tgl_dibayar', { ascending: false })
 
     const honorMapped = (honorData || [])
       .filter((h: any) => h.payroll_run?.tahun === tahun)
-      .map((h: any) => ({
-        id: h.id,
-        bulan: h.payroll_run?.bulan || 1,
-        tahun: h.payroll_run?.tahun || tahun,
-        total: Number(h.total_payout),
-        tgl: h.tgl_dibayar || `${h.payroll_run?.tahun}-${String(h.payroll_run?.bulan).padStart(2, '0')}-01`,
-        pelatih_nama: h.pelatih?.nama || 'Pelatih',
-      }))
+      .map((h: any) => {
+        const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+          ? Number(h.honor_bersih)
+          : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+        return {
+          id: h.id,
+          bulan: h.payroll_run?.bulan || 1,
+          tahun: h.payroll_run?.tahun || tahun,
+          total: net,
+          tgl: h.tgl_dibayar || `${h.payroll_run?.tahun}-${String(h.payroll_run?.bulan).padStart(2, '0')}-01`,
+          pelatih_nama: h.pelatih?.nama || 'Pelatih',
+        }
+      })
     setHonorDibayar(honorMapped)
 
     // 4. Pesanan Merchant (status lunas, diproses, atau siap_diambil)
@@ -207,10 +213,12 @@ export default function AdminKeuanganPage() {
   const allTransaksi = useMemo<TransaksiUnified[]>(() => {
     const list: TransaksiUnified[] = []
 
-    // 1. Dari tabel keuangan_club (manual & synced merchant)
+    // 1. Dari tabel keuangan_club (manual & synced merchant & kasbon)
     for (const tx of manualList) {
       const d = new Date(tx.tgl + 'T00:00:00')
       const isMerchant = tx.sumber === 'merchant' || tx.kategori === 'Penjualan Merchant'
+      const isKasbon = tx.sumber === 'kasbon' || tx.kategori.includes('Kasbon')
+      const canEdit = !isMerchant && !isKasbon
       list.push({
         id: tx.id,
         tgl: tx.tgl,
@@ -220,9 +228,9 @@ export default function AdminKeuanganPage() {
         kategori: tx.kategori,
         keterangan: tx.keterangan,
         nominal: Number(tx.nominal),
-        sumber: isMerchant ? 'merchant' : ((tx.sumber as Sumber) || 'manual'),
-        canEdit: !isMerchant,
-        canDelete: !isMerchant,
+        sumber: isMerchant ? 'merchant' : isKasbon ? 'kasbon' : ((tx.sumber as Sumber) || 'manual'),
+        canEdit,
+        canDelete: canEdit,
       })
     }
 
@@ -447,7 +455,7 @@ export default function AdminKeuanganPage() {
       BULAN_FULL[tx.bulan],
       tx.tahun,
       tx.jenis === 'income' ? 'Income' : 'Expense',
-      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : 'Toko Merchant',
+      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : tx.sumber === 'kasbon' ? 'Kasbon Pelatih' : 'Toko Merchant',
       tx.kategori,
       tx.keterangan,
       tx.nominal,
@@ -763,6 +771,7 @@ export default function AdminKeuanganPage() {
                 <option value="iuran">💰 Iuran Siswa</option>
                 <option value="merchant">🛒 Toko Merchant</option>
                 <option value="honor">🏆 Honor Pelatih</option>
+                <option value="kasbon">💳 Kasbon Pelatih</option>
               </select>
             </div>
           </div>
