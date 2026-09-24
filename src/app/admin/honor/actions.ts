@@ -107,7 +107,18 @@ export async function generatePayroll(bulan: number, tahun: number) {
 
     if (coachErr || !coaches) throw new Error('Gagal mengambil data pelatih: ' + (coachErr?.message || ''))
 
-    // 8. Hitung honor masing-masing pelatih
+    // 8. Ambil kasbon aktif pelatih yang belum lunas
+    const { data: activeDebts } = await supabaseAdmin
+      .from('kasbon_pelatih')
+      .select('pelatih_id, sisa_hutang')
+      .eq('status', 'belum_lunas')
+
+    const coachActiveDebts: Record<string, number> = {}
+    ;(activeDebts || []).forEach(d => {
+      coachActiveDebts[d.pelatih_id] = (coachActiveDebts[d.pelatih_id] || 0) + Number(d.sisa_hutang || 0)
+    })
+
+    // 9. Hitung honor masing-masing pelatih & estimasi potongan kasbon
     const coachPayouts = []
 
     for (const coach of coaches) {
@@ -129,6 +140,9 @@ export async function generatePayroll(bulan: number, tahun: number) {
         : 0
 
       const totalPayout = teachingHonor + founderShare
+      const sisaHutang = coachActiveDebts[coach.id] || 0
+      const defaultPotongan = Math.min(totalPayout, sisaHutang)
+      const honorBersih = Math.max(0, totalPayout - defaultPotongan)
 
       coachPayouts.push({
         pelatih_id: coach.id,
@@ -136,10 +150,12 @@ export async function generatePayroll(bulan: number, tahun: number) {
         teaching_honor: Math.round(teachingHonor),
         founder_margin_share: Math.round(founderShare),
         total_payout: Math.round(totalPayout),
+        potongan_kasbon: Math.round(defaultPotongan),
+        honor_bersih: Math.round(honorBersih),
       })
     }
 
-    // 9. Simpan ke database
+    // 10. Simpan ke database
     // Hapus snapshot yang lama untuk bulan/tahun ini (jika ada) untuk menghindari konflik UNIQUE
     const { data: existingRun } = await supabaseAdmin
       .from('payroll_runs')
@@ -180,6 +196,8 @@ export async function generatePayroll(bulan: number, tahun: number) {
       teaching_honor: cp.teaching_honor,
       founder_margin_share: cp.founder_margin_share,
       total_payout: cp.total_payout,
+      potongan_kasbon: cp.potongan_kasbon,
+      honor_bersih: cp.honor_bersih,
       status_dibayar: false,
     }))
 
@@ -199,19 +217,315 @@ export async function generatePayroll(bulan: number, tahun: number) {
 
 export async function updateDetailStatusDibayar(detailId: string, status: boolean) {
   try {
-    const payload = {
-      status_dibayar: status,
-      tgl_dibayar: status ? new Date().toISOString().split('T')[0] : null
+    // 1. Ambil detail payroll
+    const { data: detail, error: fetchErr } = await supabaseAdmin
+      .from('payroll_details')
+      .select('*, pelatih:pelatih_id(nama)')
+      .eq('id', detailId)
+      .single()
+
+    if (fetchErr || !detail) throw new Error('Detail payroll tidak ditemukan')
+
+    if (status === true) {
+      // 2. Jika ditandai dibayar dan ada potongan kasbon
+      let remainingToDeduct = Number(detail.potongan_kasbon || 0)
+
+      if (remainingToDeduct > 0) {
+        // Ambil kasbon aktif pelatih tersebut urut FIFO (tanggal terlama lebih dulu)
+        const { data: activeLoans } = await supabaseAdmin
+          .from('kasbon_pelatih')
+          .select('*')
+          .eq('pelatih_id', detail.pelatih_id)
+          .eq('status', 'belum_lunas')
+          .order('tgl_pinjam', { ascending: true })
+
+        for (const loan of (activeLoans || [])) {
+          if (remainingToDeduct <= 0) break
+          const amountToDeduct = Math.min(remainingToDeduct, Number(loan.sisa_hutang))
+          if (amountToDeduct > 0) {
+            // Catat di pembayaran_kasbon
+            await supabaseAdmin
+              .from('pembayaran_kasbon')
+              .insert({
+                kasbon_id: loan.id,
+                pelatih_id: detail.pelatih_id,
+                tgl_bayar: new Date().toISOString().split('T')[0],
+                nominal: amountToDeduct,
+                metode: 'potong_honor',
+                payroll_detail_id: detailId,
+                catatan: `Potongan payroll periode ${detail.payroll_run_id}`,
+              })
+
+            // Update sisa hutang kasbon
+            const newSisa = Math.max(0, Number(loan.sisa_hutang) - amountToDeduct)
+            await supabaseAdmin
+              .from('kasbon_pelatih')
+              .update({
+                sisa_hutang: newSisa,
+                status: newSisa === 0 ? 'lunas' : 'belum_lunas',
+              })
+              .eq('id', loan.id)
+
+            remainingToDeduct -= amountToDeduct
+          }
+        }
+      }
+
+      // Update status payroll detail
+      const payload = {
+        status_dibayar: true,
+        tgl_dibayar: new Date().toISOString().split('T')[0],
+      }
+
+      const { error } = await supabaseAdmin
+        .from('payroll_details')
+        .update(payload)
+        .eq('id', detailId)
+
+      if (error) throw error
+    } else {
+      // 3. Jika status dibatalkan (rollback)
+      const { data: linkedPayments } = await supabaseAdmin
+        .from('pembayaran_kasbon')
+        .select('*')
+        .eq('payroll_detail_id', detailId)
+
+      if (linkedPayments && linkedPayments.length > 0) {
+        for (const pay of linkedPayments) {
+          const { data: currentLoan } = await supabaseAdmin
+            .from('kasbon_pelatih')
+            .select('sisa_hutang')
+            .eq('id', pay.kasbon_id)
+            .single()
+
+          if (currentLoan) {
+            const restoredSisa = Number(currentLoan.sisa_hutang) + Number(pay.nominal)
+            await supabaseAdmin
+              .from('kasbon_pelatih')
+              .update({
+                sisa_hutang: restoredSisa,
+                status: 'belum_lunas',
+              })
+              .eq('id', pay.kasbon_id)
+          }
+        }
+
+        // Hapus riwayat pembayaran kasbon terkait payroll ini
+        await supabaseAdmin
+          .from('pembayaran_kasbon')
+          .delete()
+          .eq('payroll_detail_id', detailId)
+      }
+
+      // Update status payroll detail
+      const { error } = await supabaseAdmin
+        .from('payroll_details')
+        .update({
+          status_dibayar: false,
+          tgl_dibayar: null,
+        })
+        .eq('id', detailId)
+
+      if (error) throw error
     }
 
-    const { error } = await supabaseAdmin
-      .from('payroll_details')
-      .update(payload)
-      .eq('id', detailId)
-
-    if (error) throw error
     return { success: true }
   } catch (err: any) {
     return { success: false, message: err.message || 'Gagal mengubah status bayar' }
+  }
+}
+
+export async function updatePotonganKasbon(detailId: string, potongan: number) {
+  try {
+    const { data: detail, error: fetchErr } = await supabaseAdmin
+      .from('payroll_details')
+      .select('*')
+      .eq('id', detailId)
+      .single()
+
+    if (fetchErr || !detail) throw new Error('Data payroll tidak ditemukan')
+    if (detail.status_dibayar) throw new Error('Tidak dapat mengubah potongan karena honor sudah dibayarkan.')
+
+    if (potongan < 0) throw new Error('Nominal potongan tidak boleh negatif')
+    if (potongan > Number(detail.total_payout)) {
+      throw new Error(`Nominal potongan tidak boleh melebihi total honor (Maksimal: Rp ${Number(detail.total_payout).toLocaleString('id-ID')})`)
+    }
+
+    const honorBersih = Math.max(0, Number(detail.total_payout) - potongan)
+
+    const { error: updateErr } = await supabaseAdmin
+      .from('payroll_details')
+      .update({
+        potongan_kasbon: Math.round(potongan),
+        honor_bersih: Math.round(honorBersih),
+      })
+      .eq('id', detailId)
+
+    if (updateErr) throw updateErr
+
+    return { success: true, message: 'Potongan kasbon berhasil diperbarui!' }
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal mengubah potongan kasbon' }
+  }
+}
+
+export async function tambahKasbon(pelatihId: string, nominal: number, tglPinjam: string, keterangan: string) {
+  try {
+    if (!pelatihId) throw new Error('Pelatih harus dipilih')
+    if (nominal <= 0) throw new Error('Nominal pinjaman harus lebih dari 0')
+    if (!tglPinjam) throw new Error('Tanggal pinjam harus diisi')
+    if (!keterangan) throw new Error('Keterangan kasbon harus diisi')
+
+    // Ambil info nama pelatih
+    const { data: coach } = await supabaseAdmin
+      .from('pelatih')
+      .select('nama')
+      .eq('id', pelatihId)
+      .single()
+
+    const coachNama = coach?.nama || 'Pelatih'
+
+    // 1. Insert ke kasbon_pelatih
+    const { data: newKasbon, error: insertErr } = await supabaseAdmin
+      .from('kasbon_pelatih')
+      .insert({
+        pelatih_id: pelatihId,
+        nominal_pinjaman: nominal,
+        sisa_hutang: nominal,
+        tgl_pinjam: tglPinjam,
+        keterangan: keterangan.trim(),
+        status: 'belum_lunas',
+      })
+      .select()
+      .single()
+
+    if (insertErr || !newKasbon) {
+      throw new Error('Gagal mencatat kasbon: ' + (insertErr?.message || ''))
+    }
+
+    // 2. Insert ke keuangan_club (Pengeluaran kas)
+    const { error: txErr } = await supabaseAdmin
+      .from('keuangan_club')
+      .insert({
+        tgl: tglPinjam,
+        jenis: 'expense',
+        kategori: 'Kasbon Pelatih',
+        nominal: nominal,
+        keterangan: `Kasbon Pelatih: ${coachNama} — ${keterangan.trim()} [Kasbon #${newKasbon.id}]`,
+        sumber: 'kasbon',
+      })
+
+    if (txErr) {
+      console.error('Gagal sinkron kas keluar:', txErr)
+      await supabaseAdmin.from('kasbon_pelatih').delete().eq('id', newKasbon.id)
+      throw new Error('Gagal mencatat pengeluaran kas: ' + txErr.message)
+    }
+
+    return { success: true, message: 'Kasbon berhasil dicatat dan pengeluaran kas telah disinkronkan!' }
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal menambahkan kasbon' }
+  }
+}
+
+export async function hapusKasbon(kasbonId: string) {
+  try {
+    // 1. Cek riwayat pembayaran
+    const { count, error: countErr } = await supabaseAdmin
+      .from('pembayaran_kasbon')
+      .select('id', { count: 'exact', head: true })
+      .eq('kasbon_id', kasbonId)
+
+    if (countErr) throw countErr
+    if ((count || 0) > 0) {
+      throw new Error('Kasbon tidak dapat dihapus karena sudah memiliki riwayat pembayaran/cicilan.')
+    }
+
+    // 2. Hapus catatan di keuangan_club
+    await supabaseAdmin
+      .from('keuangan_club')
+      .delete()
+      .like('keterangan', `%[Kasbon #${kasbonId}]%`)
+
+    // 3. Hapus data kasbon
+    const { error: delErr } = await supabaseAdmin
+      .from('kasbon_pelatih')
+      .delete()
+      .eq('id', kasbonId)
+
+    if (delErr) throw delErr
+
+    return { success: true, message: 'Kasbon berhasil dihapus dan pengeluaran kas klub dibatalkan.' }
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal menghapus kasbon' }
+  }
+}
+
+export async function catatPembayaranTunai(kasbonId: string, nominal: number, tglBayar: string, catatan?: string) {
+  try {
+    if (nominal <= 0) throw new Error('Nominal pembayaran harus lebih dari 0')
+    if (!tglBayar) throw new Error('Tanggal bayar harus diisi')
+
+    // 1. Ambil data kasbon
+    const { data: loan, error: loanErr } = await supabaseAdmin
+      .from('kasbon_pelatih')
+      .select('*, pelatih:pelatih_id(nama)')
+      .eq('id', kasbonId)
+      .single()
+
+    if (loanErr || !loan) throw new Error('Data kasbon tidak ditemukan')
+
+    if (nominal > Number(loan.sisa_hutang)) {
+      throw new Error(`Nominal pembayaran melebihi sisa hutang (Maksimal: Rp ${Number(loan.sisa_hutang).toLocaleString('id-ID')})`)
+    }
+
+    const coachNama = (loan.pelatih as any)?.nama || 'Pelatih'
+
+    // 2. Insert ke pembayaran_kasbon
+    const { data: payment, error: payErr } = await supabaseAdmin
+      .from('pembayaran_kasbon')
+      .insert({
+        kasbon_id: kasbonId,
+        pelatih_id: loan.pelatih_id,
+        tgl_bayar: tglBayar,
+        nominal: nominal,
+        metode: 'tunai',
+        catatan: catatan?.trim() || 'Pembayaran tunai',
+      })
+      .select()
+      .single()
+
+    if (payErr || !payment) throw new Error('Gagal mencatat pembayaran: ' + (payErr?.message || ''))
+
+    // 3. Update sisa hutang
+    const newSisa = Math.max(0, Number(loan.sisa_hutang) - nominal)
+    const { error: updateErr } = await supabaseAdmin
+      .from('kasbon_pelatih')
+      .update({
+        sisa_hutang: newSisa,
+        status: newSisa === 0 ? 'lunas' : 'belum_lunas',
+      })
+      .eq('id', kasbonId)
+
+    if (updateErr) throw updateErr
+
+    // 4. Catat pemasukan ke keuangan_club
+    const { error: txErr } = await supabaseAdmin
+      .from('keuangan_club')
+      .insert({
+        tgl: tglBayar,
+        jenis: 'income',
+        kategori: 'Pelunasan Kasbon',
+        nominal: nominal,
+        keterangan: `Pelunasan Kasbon Tunai: ${coachNama} — ${catatan?.trim() || 'Cicilan manual'} [BayarKasbon #${payment.id}]`,
+        sumber: 'kasbon',
+      })
+
+    if (txErr) {
+      console.error('Gagal mencatat mutasi pemasukan:', txErr)
+    }
+
+    return { success: true, message: 'Pembayaran tunai berhasil dicatat dan kas masuk telah disinkronkan!' }
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Gagal memproses pembayaran' }
   }
 }
