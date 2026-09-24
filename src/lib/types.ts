@@ -184,6 +184,31 @@ export interface PayrollRun {
   generated_at: string
 }
 
+export interface KasbonPelatih {
+  id: string
+  pelatih_id: string
+  nominal_pinjaman: number
+  sisa_hutang: number
+  tgl_pinjam: string
+  keterangan: string
+  status: 'belum_lunas' | 'lunas'
+  created_at: string
+  pelatih?: Pick<Pelatih, 'nama' | 'role'>
+}
+
+export interface PembayaranKasbon {
+  id: string
+  kasbon_id: string
+  pelatih_id: string
+  tgl_bayar: string
+  nominal: number
+  metode: 'potong_honor' | 'tunai'
+  payroll_detail_id?: string | null
+  catatan?: string | null
+  created_at: string
+  kasbon_pelatih?: Pick<KasbonPelatih, 'keterangan' | 'nominal_pinjaman'>
+}
+
 export interface PayrollDetail {
   id: string
   payroll_run_id: string
@@ -192,6 +217,8 @@ export interface PayrollDetail {
   teaching_honor: number
   founder_margin_share: number
   total_payout: number
+  potongan_kasbon?: number
+  honor_bersih?: number
   status_dibayar: boolean
   tgl_dibayar: string | null
   created_at: string
