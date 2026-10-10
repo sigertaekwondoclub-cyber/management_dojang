@@ -59,7 +59,7 @@ function formatTgl(tgl: string) {
 // ──────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────
-type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant' | 'kasbon'
+type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant' | 'kasbon' | 'koreksi'
 
 interface TransaksiUnified {
   id: string
@@ -94,6 +94,7 @@ const SUMBER_CONFIG: Record<Sumber, { label: string; color: 'primary' | 'seconda
   honor:    { label: '🏆 Honor Pelatih', color: 'dark'      },
   merchant: { label: '🛒 Toko Merchant', color: 'accent'    },
   kasbon:   { label: '💳 Kasbon',        color: 'accent'    },
+  koreksi:  { label: '⚖️ Koreksi Saldo', color: 'accent'    },
 }
 
 // ──────────────────────────────────────────
@@ -132,6 +133,14 @@ export default function AdminKeuanganPage() {
   // ── Delete confirm state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // ── Correction balance state (Cash Opname)
+  const [correctionOpen, setCorrectionOpen] = useState(false)
+  const [targetSaldoFisik, setTargetSaldoFisik] = useState('')
+  const [correctionTgl, setCorrectionTgl] = useState(now.toISOString().split('T')[0])
+  const [correctionCatatan, setCorrectionCatatan] = useState('')
+  const [correctionSaving, setCorrectionSaving] = useState(false)
+  const [correctionError, setCorrectionError] = useState('')
 
   // ──────────────────────────────────────────
   // Fetch Data
@@ -235,6 +244,7 @@ export default function AdminKeuanganPage() {
       const d = new Date(tx.tgl + 'T00:00:00')
       const isMerchant = tx.sumber === 'merchant' || tx.kategori === 'Penjualan Merchant'
       const isKasbon = tx.sumber === 'kasbon' || tx.kategori.includes('Kasbon')
+      const isKoreksi = tx.sumber === 'koreksi' || tx.kategori.includes('Koreksi')
       const canEdit = !isMerchant && !isKasbon
       list.push({
         id: tx.id,
@@ -245,7 +255,7 @@ export default function AdminKeuanganPage() {
         kategori: tx.kategori,
         keterangan: tx.keterangan,
         nominal: Number(tx.nominal),
-        sumber: isMerchant ? 'merchant' : isKasbon ? 'kasbon' : ((tx.sumber as Sumber) || 'manual'),
+        sumber: isMerchant ? 'merchant' : isKasbon ? 'kasbon' : isKoreksi ? 'koreksi' : ((tx.sumber as Sumber) || 'manual'),
         canEdit,
         canDelete: canEdit,
       })
@@ -478,6 +488,50 @@ export default function AdminKeuanganPage() {
   }
 
   // ──────────────────────────────────────────
+  // Handlers: Koreksi Saldo (Cash Opname)
+  // ──────────────────────────────────────────
+  const handleSaveCorrection = async () => {
+    setCorrectionError('')
+    const targetFisik = parseFloat(targetSaldoFisik)
+    if (isNaN(targetFisik)) {
+      setCorrectionError('Masukkan angka saldo fisik yang valid.')
+      return
+    }
+
+    const diff = Math.round(targetFisik - saldoBersih)
+    if (diff === 0) {
+      setCorrectionError('Saldo fisik sama dengan saldo sistem saat ini. Tidak ada selisih yang perlu dikoreksi.')
+      return
+    }
+
+    const jenis: 'income' | 'expense' = diff > 0 ? 'income' : 'expense'
+    const nominal = Math.abs(diff)
+    const catatan = correctionCatatan.trim() || 'Penyesuaian kas fisik hasil opname/perhitungan riil'
+    const diffLabel = diff > 0 ? `+${formatRupiah(nominal)}` : `-${formatRupiah(nominal)}`
+    const keterangan = `⚖️ Koreksi Saldo Kas: [Sistem: ${formatRupiah(saldoBersih)} → Fisik: ${formatRupiah(targetFisik)} (${diffLabel})] — ${catatan}`
+
+    setCorrectionSaving(true)
+    const { error } = await supabase.from('keuangan_club').insert({
+      tgl: correctionTgl,
+      jenis,
+      kategori: 'Koreksi Saldo',
+      nominal,
+      keterangan,
+      sumber: 'koreksi',
+    })
+    setCorrectionSaving(false)
+
+    if (error) {
+      setCorrectionError('Gagal menyimpan koreksi: ' + error.message)
+    } else {
+      setCorrectionOpen(false)
+      setTargetSaldoFisik('')
+      setCorrectionCatatan('')
+      await fetchData()
+    }
+  }
+
+  // ──────────────────────────────────────────
   // Export CSV (all unified transactions)
   // ──────────────────────────────────────────
   const handleExportCSV = () => {
@@ -487,7 +541,7 @@ export default function AdminKeuanganPage() {
       BULAN_FULL[tx.bulan],
       tx.tahun,
       tx.jenis === 'income' ? 'Income' : 'Expense',
-      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : tx.sumber === 'kasbon' ? 'Kasbon Pelatih' : 'Toko Merchant',
+      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : tx.sumber === 'kasbon' ? 'Kasbon Pelatih' : tx.sumber === 'koreksi' ? 'Koreksi Saldo' : 'Toko Merchant',
       tx.kategori,
       tx.keterangan,
       tx.nominal,
@@ -552,6 +606,17 @@ export default function AdminKeuanganPage() {
           />
           <Button variant="secondary" onClick={fetchData} disabled={loading}>
             {loading ? '⏳' : '🔍'}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setCorrectionOpen(true)
+              setTargetSaldoFisik('')
+              setCorrectionError('')
+            }}
+            className="flex items-center gap-1.5 shadow-brutal font-bold text-sm px-4"
+          >
+            ⚖️ Koreksi Saldo
           </Button>
         </div>
       </div>
@@ -620,11 +685,23 @@ export default function AdminKeuanganPage() {
               {bulanFilter === '0' ? `Tahun ${tahunFilter}` : `${BULAN_FULL[parseInt(bulanFilter)]} ${tahunFilter}`}
             </div>
           </div>
-          {bulanFilter !== '0' && (
-            <div className="mt-3 pt-2 border-t border-dark/10 text-xs text-dark/60 font-sans">
-              Akumulasi Kas Tahun Ini: <b className={`font-mono ${saldoBersih >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(saldoBersih)}</b>
-            </div>
-          )}
+          <div className="mt-3 pt-2 border-t border-dark/10 flex flex-col gap-1">
+            {bulanFilter !== '0' && (
+              <div className="text-xs text-dark/60 font-sans">
+                Akumulasi Kas Tahun Ini: <b className={`font-mono ${saldoBersih >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(saldoBersih)}</b>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                setCorrectionOpen(true)
+                setTargetSaldoFisik('')
+                setCorrectionError('')
+              }}
+              className="text-xs font-bold font-sans text-dark/80 hover:text-dark hover:underline flex items-center justify-center gap-1 mx-auto pt-1"
+            >
+              ⚖️ Sesuaikan dengan Uang Fisik
+            </button>
+          </div>
         </Card>
       </div>
 
@@ -847,6 +924,7 @@ export default function AdminKeuanganPage() {
                 <option value="merchant">🛒 Toko Merchant</option>
                 <option value="honor">🏆 Honor Pelatih</option>
                 <option value="kasbon">💳 Kasbon Pelatih</option>
+                <option value="koreksi">⚖️ Koreksi Saldo</option>
               </select>
             </div>
           </div>
@@ -1009,6 +1087,135 @@ export default function AdminKeuanganPage() {
                   Batal
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Koreksi Saldo (Cash Opname Adjustment) ── */}
+      {correctionOpen && (
+        <div className="fixed inset-0 bg-dark/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white border-4 border-dark rounded-3xl shadow-brutal max-w-lg w-full p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between border-b-2 border-dark/10 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚖️</span>
+                <div>
+                  <h3 className="font-bold font-sans text-dark text-xl">Koreksi Saldo Kas Club</h3>
+                  <p className="text-xs text-dark/60 font-sans">Sinkronkan saldo sistem dengan uang fisik sebenarnya (Cash Opname)</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCorrectionOpen(false)}
+                className="w-8 h-8 rounded-full border-2 border-dark flex items-center justify-center text-dark hover:bg-dark/10 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Status Perbandingan */}
+            <div className="grid grid-cols-2 gap-3 bg-background p-3.5 rounded-2xl border-2 border-dark">
+              <div>
+                <div className="text-[11px] font-bold text-dark/50 uppercase font-sans">Saldo di Sistem</div>
+                <div className="text-lg font-bold font-sans text-dark">{formatRupiah(saldoBersih)}</div>
+                <div className="text-[10px] text-dark/50 font-sans">Akumulasi Kas {tahunFilter}</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold text-dark/50 uppercase font-sans">Target Uang Fisik</div>
+                <div className="text-lg font-bold font-sans text-primary">
+                  {targetSaldoFisik && !isNaN(parseFloat(targetSaldoFisik))
+                    ? formatRupiah(parseFloat(targetSaldoFisik))
+                    : 'Rp -'}
+                </div>
+                <div className="text-[10px] text-dark/50 font-sans">Uang riil di dompet/laci</div>
+              </div>
+            </div>
+
+            {/* Input Nominal Saldo Fisik */}
+            <div className="flex flex-col gap-1.5">
+              <label className="font-bold text-dark text-sm font-sans">
+                Berapa Total Uang Fisik yang Ada Saat Ini? (Rp)
+              </label>
+              <Input
+                label=""
+                type="number"
+                placeholder="Contoh: 3500000"
+                value={targetSaldoFisik}
+                onChange={e => {
+                  setTargetSaldoFisik(e.target.value)
+                  setCorrectionError('')
+                }}
+                className="font-bold text-lg"
+              />
+            </div>
+
+            {/* Live Calculation Preview */}
+            {targetSaldoFisik && !isNaN(parseFloat(targetSaldoFisik)) && (
+              (() => {
+                const diff = parseFloat(targetSaldoFisik) - saldoBersih
+                return (
+                  <div className={`p-3.5 rounded-2xl border-2 text-xs font-sans ${
+                    diff > 0
+                      ? 'bg-green-50 border-green-300 text-green-900'
+                      : diff < 0
+                      ? 'bg-red-50 border-red-300 text-red-900'
+                      : 'bg-gray-50 border-gray-300 text-gray-700'
+                  }`}>
+                    <div className="font-bold text-sm mb-1 flex items-center justify-between">
+                      <span>{diff > 0 ? '🟢 Selisih Kas Lebih (Surplus)' : diff < 0 ? '🔴 Selisih Kas Kurang (Defisit)' : '⚪ Saldo Pas'}</span>
+                      <span className="font-mono text-base font-bold">
+                        {diff > 0 ? `+${formatRupiah(diff)}` : diff < 0 ? `-${formatRupiah(Math.abs(diff))}` : 'Rp 0'}
+                      </span>
+                    </div>
+                    <p className="opacity-90 leading-relaxed">
+                      {diff > 0
+                        ? `Sistem akan otomatis mencatat Pemasukan Koreksi sebesar ${formatRupiah(diff)} agar saldo sistem bertambah tepat menjadi ${formatRupiah(parseFloat(targetSaldoFisik))}.`
+                        : diff < 0
+                        ? `Sistem akan otomatis mencatat Pengeluaran Koreksi sebesar ${formatRupiah(Math.abs(diff))} agar saldo sistem berkurang tepat menjadi ${formatRupiah(parseFloat(targetSaldoFisik))}.`
+                        : 'Saldo fisik sudah sama persis dengan saldo di program. Tidak ada penyesuaian yang perlu dibuat.'}
+                    </p>
+                  </div>
+                )
+              })()
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Tanggal Koreksi"
+                type="date"
+                value={correctionTgl}
+                onChange={e => setCorrectionTgl(e.target.value)}
+              />
+              <Input
+                label="Alasan / Catatan Opname"
+                type="text"
+                placeholder="Contoh: Opname fisik laci kasir"
+                value={correctionCatatan}
+                onChange={e => setCorrectionCatatan(e.target.value)}
+              />
+            </div>
+
+            {correctionError && (
+              <div className="p-3 bg-red-100 border-2 border-red-400 text-red-700 text-xs rounded-xl font-bold font-sans">
+                ⚠️ {correctionError}
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="primary"
+                onClick={handleSaveCorrection}
+                disabled={correctionSaving || !targetSaldoFisik || parseFloat(targetSaldoFisik) === saldoBersih}
+                className="flex-1 font-bold shadow-brutal"
+              >
+                {correctionSaving ? '⏳ Menyimpan...' : '💾 Terapkan Koreksi Saldo'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setCorrectionOpen(false)}
+                className="flex-1 font-bold"
+              >
+                Batal
+              </Button>
             </div>
           </div>
         </div>
