@@ -19,8 +19,23 @@ const BULAN_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu',
 const BULAN_FULL = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
 
-const KATEGORI_INCOME = ['Iuran Bulanan', 'Penjualan Merchant', 'Daftar Ulang', 'Donasi', 'Lainnya']
-const KATEGORI_EXPENSE = ['Honor Pelatih', 'Perlengkapan', 'Sewa Tempat', 'Administrasi', 'Lainnya']
+const KATEGORI_INCOME = [
+  'Pendaftaran / Formulir',
+  'Ujian Kenaikan Sabuk',
+  'Event & Kejuaraan',
+  'Donasi & Sponsor',
+  'Lainnya'
+]
+const KATEGORI_EXPENSE = [
+  'Perlengkapan Dojang',
+  'Sewa Tempat Latihan',
+  'Administrasi & ATK',
+  'Konsumsi Latihan/Event',
+  'P3K & Medis Atlet',
+  'Transportasi / Operasional',
+  'Honor Non-Payroll (Event/Ujian)',
+  'Lainnya'
+]
 
 // ──────────────────────────────────────────
 // Helpers
@@ -56,6 +71,7 @@ interface TransaksiUnified {
   keterangan: string
   nominal: number
   sumber: Sumber
+  metode?: string
   canEdit: boolean
   canDelete: boolean
 }
@@ -136,7 +152,7 @@ export default function AdminKeuanganPage() {
     // 2. Iuran lunas — per-record (untuk riwayat detail)
     const { data: iuranData } = await supabase
       .from('iuran')
-      .select('id, bulan, tahun, nominal, tgl_bayar, siswa:siswa_id(nama)')
+      .select('id, bulan, tahun, nominal, tgl_bayar, metode, siswa:siswa_id(nama)')
       .eq('tahun', tahun)
       .eq('status_bayar', 'lunas')
       .order('tgl_bayar', { ascending: false })
@@ -147,9 +163,10 @@ export default function AdminKeuanganPage() {
       tahun: i.tahun,
       nominal: Number(i.nominal),
       tgl: i.tgl_bayar ? i.tgl_bayar.split('T')[0] : `${i.tahun}-${String(i.bulan).padStart(2, '0')}-01`,
-      keterangan: `Iuran ${BULAN_FULL[i.bulan]} ${i.tahun}`,
+      keterangan: `Iuran ${BULAN_FULL[i.bulan]} ${i.tahun}${i.metode ? ` · ${i.metode.toUpperCase()}` : ''}`,
       total: Number(i.nominal),
       siswa_nama: i.siswa?.nama || 'Siswa',
+      metode: i.metode || 'tunai',
     }))
     setIuranLunas(iuranMapped)
 
@@ -253,6 +270,7 @@ export default function AdminKeuanganPage() {
         keterangan: `${i.keterangan} — ${i.siswa_nama}`,
         nominal: i.total,
         sumber: 'iuran',
+        metode: (i as any).metode || 'tunai',
         canEdit: false,
         canDelete: false,
       })
@@ -327,17 +345,31 @@ export default function AdminKeuanganPage() {
     })
   }, [allTransaksi])
 
-  // ── Summary totals
+  // ── Scoped Summary totals (berdasarkan bulanFilter atau 1 tahun penuh jika '0')
+  const scopedTransaksi = useMemo(() => {
+    return bulanFilter === '0'
+      ? allTransaksi
+      : allTransaksi.filter(t => t.bulan === parseInt(bulanFilter))
+  }, [allTransaksi, bulanFilter])
+
+  const scopedIncome = useMemo(() => scopedTransaksi.filter(t => t.jenis === 'income').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedExpense = useMemo(() => scopedTransaksi.filter(t => t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedSaldo = scopedIncome - scopedExpense
+
+  const scopedIncomeFromIuran = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedIncomeFromMerchant = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedIncomeFromManual = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'income').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedExpenseFromHonor = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'honor').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedExpenseFromManual = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+
+  // Estimasi metode iuran (Tunai vs Non-Tunai) pada periode terpilih
+  const scopedIuranTunai = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'iuran' && (t.metode === 'tunai' || !t.metode)).reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+  const scopedIuranTransfer = useMemo(() => scopedTransaksi.filter(t => t.sumber === 'iuran' && t.metode && t.metode !== 'tunai').reduce((s, t) => s + t.nominal, 0), [scopedTransaksi])
+
+  // ── Summary totals tahunan penuh
   const totalIncome = useMemo(() => allTransaksi.filter(t => t.jenis === 'income').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const totalExpense = useMemo(() => allTransaksi.filter(t => t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
   const saldoBersih = totalIncome - totalExpense
-
-  // ── Income breakdown
-  const incomeFromIuran = useMemo(() => allTransaksi.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
-  const incomeFromMerchant = useMemo(() => allTransaksi.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
-  const incomeFromManual = useMemo(() => allTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'income').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
-  const expenseFromHonor = useMemo(() => allTransaksi.filter(t => t.sumber === 'honor').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
-  const expenseFromManual = useMemo(() => allTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0), [allTransaksi])
 
   // ── P&L Statement Calculation (Filtered by selected month or full year)
   const pnlData = useMemo(() => {
@@ -499,10 +531,20 @@ export default function AdminKeuanganPage() {
         <div>
           <h1 className="text-3xl font-bold font-sans text-dark">📊 Keuangan Club</h1>
           <p className="text-dark/60 font-sans mt-1">
-            Laporan cashflow terpadu — iuran siswa, honor pelatih, dan transaksi manual
+            Laporan cashflow terpadu — iuran siswa, honor pelatih, kasbon, dan transaksi harian
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={bulanFilter}
+            onChange={e => setBulanFilter(e.target.value)}
+            className="border-2 border-dark rounded-xl px-3 py-2 bg-white text-dark font-sans text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+          >
+            <option value="0">🗓️ Semua Bulan</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+              <option key={m} value={String(m)}>{BULAN_FULL[m]}</option>
+            ))}
+          </select>
           <Input
             label="" type="number" value={tahunFilter}
             onChange={e => setTahunFilter(e.target.value)}
@@ -517,45 +559,72 @@ export default function AdminKeuanganPage() {
       {/* ── Summary 3 Kartu Utama ── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-2 border-dark p-6">
-          <div className="text-sm text-dark/60 font-sans mb-1">💵 Total Income</div>
-          <div className="text-2xl font-bold font-sans text-green-700">{formatRupiah(totalIncome)}</div>
-          <div className="mt-3 flex flex-col gap-1">
-            <div className="flex justify-between text-xs text-dark/50 font-sans">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-dark/60 font-sans font-bold">💵 Total Income</span>
+            <span className="text-xs bg-dark/5 text-dark/60 px-2 py-0.5 rounded-md font-mono">
+              {bulanFilter === '0' ? `Tahun ${tahunFilter}` : BULAN_FULL[parseInt(bulanFilter)]}
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-sans text-green-700">{formatRupiah(scopedIncome)}</div>
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-dark/10 pt-2">
+            <div className="flex justify-between text-xs text-dark/70 font-sans">
               <span>💰 Iuran Siswa</span>
-              <span className="font-bold text-dark/70">{formatRupiah(incomeFromIuran)}</span>
+              <span className="font-bold">{formatRupiah(scopedIncomeFromIuran)}</span>
             </div>
-            <div className="flex justify-between text-xs text-dark/50 font-sans">
+            {scopedIncomeFromIuran > 0 && (
+              <div className="text-[11px] text-dark/50 bg-green-50 px-2 py-1 rounded border border-green-200 flex justify-between">
+                <span>💵 Tunai: <b>{formatRupiahShort(scopedIuranTunai)}</b></span>
+                <span>🏦 Bank: <b>{formatRupiahShort(scopedIuranTransfer)}</b></span>
+              </div>
+            )}
+            <div className="flex justify-between text-xs text-dark/70 font-sans">
               <span>🛒 Toko Merchant</span>
-              <span className="font-bold text-dark/70">{formatRupiah(incomeFromMerchant)}</span>
+              <span className="font-bold">{formatRupiah(scopedIncomeFromMerchant)}</span>
             </div>
-            <div className="flex justify-between text-xs text-dark/50 font-sans">
-              <span>✏️ Manual</span>
-              <span className="font-bold text-dark/70">{formatRupiah(incomeFromManual)}</span>
+            <div className="flex justify-between text-xs text-dark/70 font-sans">
+              <span>✏️ Kas Manual/Lainnya</span>
+              <span className="font-bold">{formatRupiah(scopedIncomeFromManual)}</span>
             </div>
           </div>
         </Card>
 
         <Card className="border-2 border-dark p-6">
-          <div className="text-sm text-dark/60 font-sans mb-1">💸 Total Expense</div>
-          <div className="text-2xl font-bold font-sans text-red-600">{formatRupiah(totalExpense)}</div>
-          <div className="mt-3 flex flex-col gap-1">
-            <div className="flex justify-between text-xs text-dark/50 font-sans">
-              <span>🏆 Honor Pelatih</span>
-              <span className="font-bold text-dark/70">{formatRupiah(expenseFromHonor)}</span>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-dark/60 font-sans font-bold">💸 Total Expense</span>
+            <span className="text-xs bg-dark/5 text-dark/60 px-2 py-0.5 rounded-md font-mono">
+              {bulanFilter === '0' ? `Tahun ${tahunFilter}` : BULAN_FULL[parseInt(bulanFilter)]}
+            </span>
+          </div>
+          <div className="text-2xl font-bold font-sans text-red-600">{formatRupiah(scopedExpense)}</div>
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-dark/10 pt-2">
+            <div className="flex justify-between text-xs text-dark/70 font-sans">
+              <span>🏆 Honor Pelatih (Bersih)</span>
+              <span className="font-bold">{formatRupiah(scopedExpenseFromHonor)}</span>
             </div>
-            <div className="flex justify-between text-xs text-dark/50 font-sans">
-              <span>✏️ Manual</span>
-              <span className="font-bold text-dark/70">{formatRupiah(expenseFromManual)}</span>
+            <div className="flex justify-between text-xs text-dark/70 font-sans">
+              <span>✏️ Operasional/Manual</span>
+              <span className="font-bold">{formatRupiah(scopedExpenseFromManual)}</span>
             </div>
           </div>
         </Card>
 
-        <Card className={`border-2 text-center p-6 ${saldoBersih >= 0 ? 'bg-primary/10 border-primary' : 'bg-accent/10 border-accent'}`}>
-          <div className="text-sm text-dark/60 font-sans mb-1">🏦 Saldo Bersih</div>
-          <div className={`text-2xl font-bold font-sans ${saldoBersih >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-            {formatRupiah(saldoBersih)}
+        <Card className={`border-2 text-center p-6 flex flex-col justify-between ${scopedSaldo >= 0 ? 'bg-primary/10 border-primary' : 'bg-accent/10 border-accent'}`}>
+          <div>
+            <div className="flex items-center justify-center gap-1 text-sm text-dark/60 font-sans font-bold mb-1">
+              <span>🏦 {bulanFilter === '0' ? 'Saldo Bersih Tahun Ini' : 'Surplus / Defisit Periode'}</span>
+            </div>
+            <div className={`text-2xl font-bold font-sans ${scopedSaldo >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+              {formatRupiah(scopedSaldo)}
+            </div>
+            <div className="text-xs text-dark/50 font-sans mt-1">
+              {bulanFilter === '0' ? `Tahun ${tahunFilter}` : `${BULAN_FULL[parseInt(bulanFilter)]} ${tahunFilter}`}
+            </div>
           </div>
-          <div className="text-xs text-dark/40 font-sans mt-2">Tahun {tahunFilter}</div>
+          {bulanFilter !== '0' && (
+            <div className="mt-3 pt-2 border-t border-dark/10 text-xs text-dark/60 font-sans">
+              Akumulasi Kas Tahun Ini: <b className={`font-mono ${saldoBersih >= 0 ? 'text-green-700' : 'text-red-600'}`}>{formatRupiah(saldoBersih)}</b>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -729,6 +798,12 @@ export default function AdminKeuanganPage() {
               disabled={formSaving || !formNominal || !formKeterangan.trim()}>
               {formSaving ? '⏳ Menyimpan...' : '💾 Simpan Transaksi'}
             </Button>
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-3 text-xs text-blue-900 font-sans flex items-start gap-2">
+              <span className="text-base">ℹ️</span>
+              <div>
+                <b>Perhatian Anti-Double Counting:</b> Pembayaran <b>Iuran Siswa</b>, <b>Honor Pelatih</b>, dan <b>Pesanan Toko</b> sudah otomatis disinkronkan oleh sistem. Gunakan form ini khusus untuk operasional kas fisik, biaya ujian, pendaftaran formulir, konsumsi, atau donasi agar pembukuan tidak dobel.
+              </div>
+            </div>
             {formSuccess && <p className="text-green-700 font-bold font-sans text-sm">✅ Transaksi berhasil disimpan!</p>}
           </div>
         )}

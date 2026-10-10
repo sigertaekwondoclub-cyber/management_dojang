@@ -1,0 +1,37 @@
+=================================================
+PANDUAN PRAKTIS BAYAR IURAN - SIGER TAEKWONDO
+(Bisa langsung di-copy ke WhatsApp Orang Tua)
+=================================================
+
+Bapak/Ibu Orang Tua/Wali Murid, berikut cara mudah membayar iuran bulanan:
+
+1. BUKA APLIKASI & LOGIN
+   - Buka web aplikasi Siger TKD.
+   - Masukkan Email & Password akun Bapak/Ibu.
+   *(Jika punya lebih dari 1 anak, pastikan nama anak yang dipilih sudah benar).*
+
+2. CEK TAGIHAN
+   - Klik menu [ 💰 Iuran ].
+   - Lihat nominal tagihan bulan ini.
+
+3. TRANSFER PEMBAYARAN
+   - Transfer sesuai nominal ke rekening resmi Dojang.
+   - Jangan lupa SCREENSHOT / FOTO bukti transfernya.
+
+4. UPLOAD BUKTI TRANSFER
+   - Di menu [ 💰 Iuran ], klik tombol:
+     [ 📤 Upload Bukti Transfer ]
+   - Pilih foto bukti transfer tadi.
+   - Selesai! Status akan otomatis menjadi "Menunggu Verif".
+
+-------------------------------------------------
+STATUS PEMBAYARAN:
+- ⏳ Belum Bayar : Tagihan baru, silakan transfer.
+- 🔍 Menunggu Verif : Bukti sudah masuk, menunggu dicek admin.
+- ✅ Lunas : Pembayaran sudah dikonfirmasi admin.
+-------------------------------------------------
+
+*Catatan: Jika bayar tunai (cash) di tempat latihan, tidak perlu upload bukti transfer. Admin dojang yang akan langsung mengubah status menjadi Lunas.
+
+Terima kasih atas kerja samanya! 🙏🥋
+=================================================

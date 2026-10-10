@@ -73,7 +73,7 @@ export default function AdminDashboardPage() {
       supabase.from('pendaftaran_siswa').select('id').eq('status', 'pending'),
       supabase.from('pelatih').select('id', { count: 'exact', head: true }).eq('status_aktif', true),
       supabase.from('iuran').select('nominal, status_bayar').eq('bulan', bulan).eq('tahun', tahun),
-      supabase.from('keuangan_club').select('jenis, nominal').gte('tgl', startBulan),
+      supabase.from('keuangan_club').select('jenis, nominal, sumber, kategori, keterangan').gte('tgl', startBulan),
       // Honor sudah dibayar: dari payroll_details dengan status_dibayar = true
       payrollRunId
         ? supabase.from('payroll_details').select('total_payout, potongan_kasbon, honor_bersih').eq('payroll_run_id', payrollRunId).eq('status_dibayar', true)
@@ -108,8 +108,9 @@ export default function AdminDashboardPage() {
     })
     const merchantPemasukan = (merchantOmzetResult.data || []).reduce((acc, c) => acc + Number(c.total_harga), 0)
     let income = iuranTerkumpul + merchantPemasukan, expense = 0
-    cashflowResult.data?.forEach(c => {
-      if (c.jenis === 'income') income += Number(c.nominal)
+    cashflowResult.data?.forEach((c: any) => {
+      const isMerchant = c.sumber === 'merchant' || c.kategori === 'Penjualan Merchant' || (c.keterangan && c.keterangan.includes('[Pesanan #'))
+      if (c.jenis === 'income' && !isMerchant) income += Number(c.nominal)
       if (c.jenis === 'expense') expense += Number(c.nominal)
     })
     // Honor sudah dibayar dihitung dari payroll_details (honor_bersih yang keluar kas)

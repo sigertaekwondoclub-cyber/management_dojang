@@ -391,10 +391,13 @@ export default function AdminLaporanPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         rows.push(['Pemasukan', 'Penjualan Merchant', `Pesanan Merchant — ${(r.siswa as any)?.nama || 'Siswa'}`, r.total_harga])
       })
+      // Transaksi manual murni (abaikan entri synced merchant agar tidak dobel)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transaksiRows.forEach((r: any) => {
-        rows.push([r.jenis === 'income' ? 'Pemasukan' : 'Pengeluaran', r.kategori, r.keterangan, r.nominal])
-      })
+      transaksiRows
+        .filter((r: any) => r.sumber !== 'merchant' && r.kategori !== 'Penjualan Merchant' && !r.keterangan?.includes('[Pesanan #'))
+        .forEach((r: any) => {
+          rows.push([r.jenis === 'income' ? 'Pemasukan' : 'Pengeluaran', r.kategori, r.keterangan, r.nominal])
+        })
       const pr = keuanganData[0]?.payrollRun
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
@@ -570,12 +573,18 @@ export default function AdminLaporanPage() {
   const transaksiRows = keuanganData[0]?.transaksi || []
   const payrollRun = keuanganData[0]?.payrollRun || null
 
+  // Filter transaksi manual murni (abaikan entri yang bersumber dari sinkronisasi merchant)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const transaksiRowsManual = transaksiRows.filter((r: any) => 
+    r.sumber !== 'merchant' && r.kategori !== 'Penjualan Merchant' && !r.keterangan?.includes('[Pesanan #')
+  )
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pemasukanIuran = iuranRows.filter((r: any) => r.status_bayar === 'lunas').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pemasukanMerchant = merchantRows.reduce((s: number, r: any) => s + Number(r.total_harga || 0), 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pemasukanManual = transaksiRows.filter((r: any) => r.jenis === 'income').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  const pemasukanManual = transaksiRowsManual.filter((r: any) => r.jenis === 'income').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   const totalPemasukan = pemasukanIuran + pemasukanMerchant + pemasukanManual
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -584,7 +593,7 @@ export default function AdminLaporanPage() {
     return s + net
   }, 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pengeluaranManual = transaksiRows.filter((r: any) => r.jenis === 'expense').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
+  const pengeluaranManual = transaksiRowsManual.filter((r: any) => r.jenis === 'expense').reduce((s: number, r: any) => s + Number(r.nominal || 0), 0)
   const totalPengeluaran = pengeluaranHonor + pengeluaranManual
   const saldoBersih = totalPemasukan - totalPengeluaran
 
@@ -1095,7 +1104,7 @@ export default function AdminLaporanPage() {
                     </tr></thead>
                     <tbody>
                       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {transaksiRows.map((t: any, i: number) => (
+                      {transaksiRowsManual.map((t: any, i: number) => (
                         <tr key={i} className="border-b border-dark/10">
                           <td className="py-2 text-dark/70 text-xs">{t.tgl}</td>
                           <td className="py-2">
@@ -1110,7 +1119,7 @@ export default function AdminLaporanPage() {
                           </td>
                         </tr>
                       ))}
-                      {transaksiRows.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-dark/40">Tidak ada transaksi kas manual pada periode ini</td></tr>}
+                      {transaksiRowsManual.length === 0 && <tr><td colSpan={5} className="py-8 text-center text-dark/40">Tidak ada transaksi kas manual pada periode ini</td></tr>}
                     </tbody>
                   </table>
                 </div>
