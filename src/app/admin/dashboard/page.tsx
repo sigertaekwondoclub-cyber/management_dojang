@@ -115,9 +115,9 @@ export default function AdminDashboardPage() {
     })
     // Honor sudah dibayar dihitung dari payroll_details (honor_bersih yang keluar kas)
     honorResult.data?.forEach((h: any) => {
-      const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+      const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
         ? Number(h.honor_bersih)
-        : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+        : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
       expense += net
     })
 
@@ -187,9 +187,9 @@ export default function AdminDashboardPage() {
     setHonorBelumBayar({
       count: hbData.length,
       total: hbData.reduce((acc: number, h: any) => {
-        const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+        const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
           ? Number(h.honor_bersih)
-          : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+          : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
         return acc + net
       }, 0),
     })

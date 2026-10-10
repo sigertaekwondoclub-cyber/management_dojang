@@ -88,12 +88,12 @@ export default function PelatihHonorPage() {
   useEffect(() => { fetchHonor() }, [fetchHonor])
 
   const totalDiterima = honorList.filter(h => h.status_dibayar).reduce((s, h) => {
-    const net = h.honor_bersih !== null && h.honor_bersih !== undefined ? Number(h.honor_bersih) : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+    const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0) ? Number(h.honor_bersih) : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
     return s + net
   }, 0)
 
   const totalBelum = honorList.filter(h => !h.status_dibayar).reduce((s, h) => {
-    const net = h.honor_bersih !== null && h.honor_bersih !== undefined ? Number(h.honor_bersih) : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+    const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0) ? Number(h.honor_bersih) : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
     return s + net
   }, 0)
 
@@ -187,7 +187,7 @@ export default function PelatihHonorPage() {
             {byTahun[tahun].map(honor => {
               const honorKotor = Number(honor.total_payout || 0)
               const potongan = Number(honor.potongan_kasbon || 0)
-              const honorBersih = honor.honor_bersih !== null && honor.honor_bersih !== undefined ? Number(honor.honor_bersih) : (honorKotor - potongan)
+              const honorBersih = (honor.honor_bersih !== null && honor.honor_bersih !== undefined && Number(honor.honor_bersih) > 0) ? Number(honor.honor_bersih) : Math.max(0, honorKotor - potongan)
 
               return (
                 <Card key={honor.id} className="flex flex-col gap-4 border-2 border-dark p-6">

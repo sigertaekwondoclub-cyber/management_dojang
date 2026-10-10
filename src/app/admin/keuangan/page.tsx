@@ -194,9 +194,9 @@ export default function AdminKeuanganPage() {
     const honorMapped = (honorData || [])
       .filter((h: any) => h.payroll_run?.tahun === tahun)
       .map((h: any) => {
-        const net = h.honor_bersih !== null && h.honor_bersih !== undefined
+        const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
           ? Number(h.honor_bersih)
-          : (Number(h.total_payout) - Number(h.potongan_kasbon || 0))
+          : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
         return {
           id: h.id,
           bulan: h.payroll_run?.bulan || 1,

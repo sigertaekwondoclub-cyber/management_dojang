@@ -445,7 +445,7 @@ export default function AdminLaporanPage() {
       const pr = keuanganData[0]?.payrollRun
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
-        const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+        const net = (d.honor_bersih !== null && d.honor_bersih !== undefined && Number(d.honor_bersih) > 0) ? Number(d.honor_bersih) : Math.max(0, Number(d.total_payout || 0) - Number(d.potongan_kasbon || 0))
         items.push({
           no: no++,
           tgl: `${filterTahun}-${filterBulan}-28`,
@@ -513,7 +513,7 @@ export default function AdminLaporanPage() {
       const pr = keuanganData[0]?.payrollRun
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
-        const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+        const net = (d.honor_bersih !== null && d.honor_bersih !== undefined && Number(d.honor_bersih) > 0) ? Number(d.honor_bersih) : Math.max(0, Number(d.total_payout || 0) - Number(d.potongan_kasbon || 0))
         rows.push(['Pengeluaran', 'Honor Pelatih', `Honor ${d.pelatih?.nama || 'Pelatih'}${Number(d.potongan_kasbon || 0) > 0 ? ' (Bersih)' : ''}`, net])
       })
 
@@ -540,7 +540,7 @@ export default function AdminLaporanPage() {
       downloadCSV(`honor-pelatih-${bul}-${filterTahun}.csv`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (run.payroll_details || []).map((d: any) => {
-          const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+          const net = (d.honor_bersih !== null && d.honor_bersih !== undefined && Number(d.honor_bersih) > 0) ? Number(d.honor_bersih) : Math.max(0, Number(d.total_payout || 0) - Number(d.potongan_kasbon || 0))
           return [d.pelatih?.nama || '', d.pelatih?.role || '', d.teaching_honor || 0, d.founder_margin_share || 0, d.total_payout || 0, d.potongan_kasbon || 0, net, d.status_dibayar ? 'Sudah Dibayar' : 'Belum']
         }),
         ['Nama Pelatih', 'Role', 'Honor Mengajar', 'Founder Share', 'Honor Kotor', 'Potongan Kasbon', 'Honor Bersih', 'Status']
@@ -701,7 +701,7 @@ export default function AdminLaporanPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pengeluaranHonor = (payrollRun?.payroll_details || []).filter((d: any) => d.status_dibayar).reduce((s: number, d: any) => {
-    const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+    const net = (d.honor_bersih !== null && d.honor_bersih !== undefined && Number(d.honor_bersih) > 0) ? Number(d.honor_bersih) : Math.max(0, Number(d.total_payout || 0) - Number(d.potongan_kasbon || 0))
     return s + net
   }, 0)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1287,7 +1287,7 @@ export default function AdminLaporanPage() {
                             <tbody>
                               {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                               {details.map((d: any, i: number) => {
-                                const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+                                const net = (d.honor_bersih !== null && d.honor_bersih !== undefined && Number(d.honor_bersih) > 0) ? Number(d.honor_bersih) : Math.max(0, Number(d.total_payout || 0) - Number(d.potongan_kasbon || 0))
                                 return (
                                 <tr key={i} className="border-b border-dark/10">
                                   <td className="py-2 font-bold text-dark">{d.pelatih?.nama}</td>
