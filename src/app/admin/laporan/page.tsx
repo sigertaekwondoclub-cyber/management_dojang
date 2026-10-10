@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
 
 const supabase = createClient()
 
@@ -377,6 +378,117 @@ export default function AdminLaporanPage() {
     URL.revokeObjectURL(url)
   }
 
+  const handleDownloadExcel = () => {
+    const bul = BULAN_NAMES[parseInt(filterBulan)]
+    if (activeTab === 'keuangan') {
+      const items: FinancialExportItem[] = []
+      let no = 1
+
+      // 1. Iuran lunas
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      iuranRows.filter((r: any) => r.status_bayar === 'lunas').forEach((r: any) => {
+        const nominal = Number(r.nominal) || 0
+        items.push({
+          no: no++,
+          tgl: `${filterTahun}-${filterBulan}-01`,
+          jenis: 'Income',
+          sumber: 'Iuran Siswa',
+          kategori: 'Iuran Bulanan',
+          keterangan: `Iuran Bulanan — ${(r.siswa as any)?.nama || 'Siswa'}`,
+          metode: 'Tunai / Transfer',
+          pemasukan: nominal,
+          pengeluaran: 0,
+          saldoKumulatif: 0,
+        })
+      })
+
+      // 2. Merchant
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      merchantRows.forEach((r: any) => {
+        const nominal = Number(r.total_harga) || 0
+        items.push({
+          no: no++,
+          tgl: (r.created_at || '').slice(0, 10) || `${filterTahun}-${filterBulan}-01`,
+          jenis: 'Income',
+          sumber: 'Toko Merchant',
+          kategori: 'Penjualan Merchant',
+          keterangan: `Pesanan Merchant — ${(r.siswa as any)?.nama || 'Siswa'}`,
+          metode: 'QRIS / Transfer',
+          pemasukan: nominal,
+          pengeluaran: 0,
+          saldoKumulatif: 0,
+        })
+      })
+
+      // 3. Manual
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transaksiRows
+        .filter((r: any) => r.sumber !== 'merchant' && r.kategori !== 'Penjualan Merchant' && !r.keterangan?.includes('[Pesanan #'))
+        .forEach((r: any) => {
+          const nominal = Number(r.nominal) || 0
+          const isIncome = r.jenis === 'income'
+          items.push({
+            no: no++,
+            tgl: r.tgl,
+            jenis: isIncome ? 'Income' : 'Expense',
+            sumber: r.sumber === 'koreksi' ? 'Koreksi Saldo' : 'Manual',
+            kategori: r.kategori || '-',
+            keterangan: r.keterangan || '-',
+            metode: '-',
+            pemasukan: isIncome ? nominal : 0,
+            pengeluaran: isIncome ? 0 : nominal,
+            saldoKumulatif: 0,
+          })
+        })
+
+      // 4. Honor
+      const pr = keuanganData[0]?.payrollRun
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(pr?.payroll_details || []).filter((d: any) => d.status_dibayar).forEach((d: any) => {
+        const net = d.honor_bersih !== null && d.honor_bersih !== undefined ? Number(d.honor_bersih) : (Number(d.total_payout) - Number(d.potongan_kasbon || 0))
+        items.push({
+          no: no++,
+          tgl: `${filterTahun}-${filterBulan}-28`,
+          jenis: 'Expense',
+          sumber: 'Honor Pelatih',
+          kategori: 'Honor Pelatih',
+          keterangan: `Honor ${d.pelatih?.nama || 'Pelatih'}${Number(d.potongan_kasbon || 0) > 0 ? ' (Bersih)' : ''}`,
+          metode: 'Transfer',
+          pemasukan: 0,
+          pengeluaran: net,
+          saldoKumulatif: 0,
+        })
+      })
+
+      // Urutkan kronologis
+      items.sort((a, b) => a.tgl.localeCompare(b.tgl))
+      let rBal = 0
+      items.forEach((it, idx) => {
+        it.no = idx + 1
+        rBal += (it.pemasukan - it.pengeluaran)
+        it.saldoKumulatif = rBal
+      })
+
+      const summary: FinancialSummaryInfo = {
+        totalIncome: totalPemasukan,
+        totalExpense: totalPengeluaran,
+        saldoBersih: saldoBersih,
+        incomeIuran: pemasukanIuran,
+        incomeMerchant: pemasukanMerchant,
+        incomeManual: pemasukanManual,
+        expenseHonor: pengeluaranHonor,
+        expenseManual: pengeluaranManual,
+      }
+
+      exportKeuanganToExcel({
+        filename: `laporan_keuangan_${bul}_${filterTahun}`,
+        periodeLabel: `${bul} ${filterTahun}`,
+        summary,
+        transactions: items,
+      })
+    }
+  }
+
   const handleDownloadCSV = () => {
     const bul = BULAN_NAMES[parseInt(filterBulan)]
     if (activeTab === 'keuangan') {
@@ -621,13 +733,19 @@ export default function AdminLaporanPage() {
           <h1 className="text-3xl font-bold font-sans text-dark">📄 Laporan, Rekap &amp; Tagihan</h1>
           <p className="text-dark/60 font-sans mt-1">Rekap data kehadiran siswa, keuangan, dan pengiriman tagihan iuran WhatsApp</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <button onClick={() => window.print()}
-            className="px-4 py-2 bg-dark text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-dark/80 transition-colors shadow-brutal">
+            className="px-4 py-2 bg-dark text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-dark/80 transition-colors shadow-brutal flex items-center gap-1.5">
             🖨️ Print / PDF
           </button>
+          {activeTab === 'keuangan' && (
+            <button onClick={handleDownloadExcel}
+              className="px-4 py-2 bg-[#107C41] text-white rounded-2xl font-bold text-sm border-2 border-dark hover:bg-[#0c5c30] transition-colors shadow-brutal flex items-center gap-1.5">
+              📊 Export Excel (.xlsx)
+            </button>
+          )}
           <button onClick={handleDownloadCSV}
-            className="px-4 py-2 bg-primary text-dark rounded-2xl font-bold text-sm border-2 border-dark hover:bg-primary/80 transition-colors shadow-brutal">
+            className="px-4 py-2 bg-primary text-dark rounded-2xl font-bold text-sm border-2 border-dark hover:bg-primary/80 transition-colors shadow-brutal flex items-center gap-1.5">
             ⬇️ Download CSV
           </button>
         </div>

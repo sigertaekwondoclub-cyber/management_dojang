@@ -11,6 +11,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
 import type { KeuanganClub } from '@/lib/types'
+import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
+import { PrintReportModal } from '@/components/keuangan/PrintReportModal'
 
 // ──────────────────────────────────────────
 // Constants
@@ -141,6 +143,9 @@ export default function AdminKeuanganPage() {
   const [correctionCatatan, setCorrectionCatatan] = useState('')
   const [correctionSaving, setCorrectionSaving] = useState(false)
   const [correctionError, setCorrectionError] = useState('')
+
+  // ── Print / PDF Modal Preview state
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false)
 
   // ──────────────────────────────────────────
   // Fetch Data
@@ -532,25 +537,98 @@ export default function AdminKeuanganPage() {
   }
 
   // ──────────────────────────────────────────
-  // Export CSV (all unified transactions)
+  // Export Data Preparation (Excel & PDF)
+  // ──────────────────────────────────────────
+  const exportData = useMemo(() => {
+    let running = 0
+    // Chronological order for cumulative running balance
+    const items: FinancialExportItem[] = [...filteredTransaksi]
+      .sort((a, b) => a.tgl.localeCompare(b.tgl))
+      .map((tx, idx) => {
+        const pemasukan = tx.jenis === 'income' ? tx.nominal : 0
+        const pengeluaran = tx.jenis === 'expense' ? tx.nominal : 0
+        running += (pemasukan - pengeluaran)
+
+        const sumberMap: Record<string, string> = {
+          manual: 'Manual',
+          iuran: 'Iuran Siswa',
+          honor: 'Honor Pelatih',
+          merchant: 'Toko Merchant',
+          kasbon: 'Kasbon Pelatih',
+          koreksi: 'Koreksi Saldo',
+        }
+
+        return {
+          no: idx + 1,
+          tgl: tx.tgl,
+          jenis: tx.jenis === 'income' ? 'Income' : 'Expense',
+          sumber: sumberMap[tx.sumber] || tx.sumber,
+          kategori: tx.kategori || '-',
+          keterangan: tx.keterangan || '-',
+          metode: tx.metode || (tx.sumber === 'iuran' ? 'Tunai / Non-Tunai' : '-'),
+          pemasukan,
+          pengeluaran,
+          saldoKumulatif: running,
+        }
+      })
+
+    const sumInfo: FinancialSummaryInfo = {
+      totalIncome: filteredTransaksi.filter(t => t.jenis === 'income').reduce((s, t) => s + t.nominal, 0),
+      totalExpense: filteredTransaksi.filter(t => t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0),
+      saldoBersih: filteredTransaksi.filter(t => t.jenis === 'income').reduce((s, t) => s + t.nominal, 0) - filteredTransaksi.filter(t => t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0),
+      incomeIuran: filteredTransaksi.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0),
+      incomeMerchant: filteredTransaksi.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0),
+      incomeManual: filteredTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'income').reduce((s, t) => s + t.nominal, 0),
+      expenseHonor: filteredTransaksi.filter(t => t.sumber === 'honor').reduce((s, t) => s + t.nominal, 0),
+      expenseManual: filteredTransaksi.filter(t => t.sumber === 'manual' && t.jenis === 'expense').reduce((s, t) => s + t.nominal, 0),
+      iuranTunai: filteredTransaksi.filter(t => t.sumber === 'iuran' && (t.metode === 'tunai' || !t.metode)).reduce((s, t) => s + t.nominal, 0),
+      iuranTransfer: filteredTransaksi.filter(t => t.sumber === 'iuran' && t.metode && t.metode !== 'tunai').reduce((s, t) => s + t.nominal, 0),
+    }
+
+    const periodeLabel = bulanFilter === '0'
+      ? `Tahun ${tahunFilter} (Semua Bulan / Keseluruhan)`
+      : `${BULAN_FULL[parseInt(bulanFilter)]} ${tahunFilter}`
+
+    const filterInfo = [
+      jenisFilter !== 'semua' ? `Jenis: ${jenisFilter}` : '',
+      sumberFilter !== 'semua' ? `Sumber: ${sumberFilter}` : '',
+    ].filter(Boolean).join(' | ')
+
+    return { items, summary: sumInfo, periodeLabel, filterInfo }
+  }, [filteredTransaksi, bulanFilter, tahunFilter, jenisFilter, sumberFilter])
+
+  const handleExportExcel = () => {
+    exportKeuanganToExcel({
+      periodeLabel: exportData.periodeLabel,
+      summary: exportData.summary,
+      transactions: exportData.items,
+    })
+  }
+
+  // ──────────────────────────────────────────
+  // Export CSV (fallback)
   // ──────────────────────────────────────────
   const handleExportCSV = () => {
-    const headers = ['Tanggal', 'Bulan', 'Tahun', 'Jenis', 'Sumber', 'Kategori', 'Keterangan', 'Nominal']
-    const rows = filteredTransaksi.map(tx => [
-      tx.tgl,
-      BULAN_FULL[tx.bulan],
-      tx.tahun,
-      tx.jenis === 'income' ? 'Income' : 'Expense',
-      tx.sumber === 'manual' ? 'Manual' : tx.sumber === 'iuran' ? 'Iuran Siswa' : tx.sumber === 'honor' ? 'Honor Pelatih' : tx.sumber === 'kasbon' ? 'Kasbon Pelatih' : tx.sumber === 'koreksi' ? 'Koreksi Saldo' : 'Toko Merchant',
-      tx.kategori,
-      tx.keterangan,
-      tx.nominal,
+    const headers = ['No', 'Tanggal', 'Bulan', 'Tahun', 'Jenis', 'Sumber', 'Kategori', 'Keterangan', 'Metode', 'Pemasukan', 'Pengeluaran', 'Saldo Kumulatif']
+    const rows = exportData.items.map(it => [
+      it.no,
+      it.tgl,
+      it.tgl.split('-')[1] || '',
+      it.tgl.split('-')[0] || '',
+      it.jenis,
+      it.sumber,
+      it.kategori,
+      it.keterangan,
+      it.metode,
+      it.pemasukan,
+      it.pengeluaran,
+      it.saldoKumulatif,
     ])
     const csv = 'data:text/csv;charset=utf-8,'
       + [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n')
     const link = document.createElement('a')
     link.setAttribute('href', encodeURI(csv))
-    link.setAttribute('download', `keuangan_${tahunFilter}_${bulanFilter !== '0' ? `bulan${bulanFilter}_` : ''}${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('download', `laporan_keuangan_${tahunFilter}_${bulanFilter !== '0' ? `bulan_${bulanFilter}_` : 'keseluruhan_'}${new Date().toISOString().split('T')[0]}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -929,9 +1007,32 @@ export default function AdminKeuanganPage() {
             </div>
           </div>
 
-          <Button variant="secondary" onClick={handleExportCSV} disabled={filteredTransaksi.length === 0}>
-            📤 Export CSV
-          </Button>
+          <div className="flex gap-2 flex-wrap items-center">
+            <Button
+              variant="primary"
+              onClick={handleExportExcel}
+              disabled={filteredTransaksi.length === 0}
+              className="flex items-center gap-1.5 font-bold shadow-brutal text-sm"
+            >
+              📊 Export Excel (.xlsx)
+            </Button>
+            <Button
+              variant="dark"
+              onClick={() => setPdfPreviewOpen(true)}
+              disabled={filteredTransaksi.length === 0}
+              className="flex items-center gap-1.5 font-bold shadow-brutal text-sm text-white"
+            >
+              📄 Cetak / PDF
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleExportCSV}
+              disabled={filteredTransaksi.length === 0}
+              className="text-xs"
+            >
+              📤 CSV
+            </Button>
+          </div>
         </div>
 
         {/* Stats filter hasil */}
@@ -1220,6 +1321,16 @@ export default function AdminKeuanganPage() {
           </div>
         </div>
       )}
+
+      {/* ── Modal Pratinjau Cetak / PDF ── */}
+      <PrintReportModal
+        isOpen={pdfPreviewOpen}
+        onClose={() => setPdfPreviewOpen(false)}
+        periodeLabel={exportData.periodeLabel}
+        summary={exportData.summary}
+        transactions={exportData.items}
+        filterInfo={exportData.filterInfo}
+      />
     </div>
   )
 }
