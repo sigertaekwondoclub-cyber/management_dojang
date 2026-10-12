@@ -13,6 +13,9 @@ import {
 import type { KeuanganClub } from '@/lib/types'
 import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
 import { PrintReportModal } from '@/components/keuangan/PrintReportModal'
+import { BankReconciliationTab } from '@/components/keuangan/BankReconciliationTab'
+import { ProfitLossTab, type PnLDataDetailed } from '@/components/keuangan/ProfitLossTab'
+import { BalanceSheetTab, type BalanceSheetData } from '@/components/keuangan/BalanceSheetTab'
 
 // ──────────────────────────────────────────
 // Constants
@@ -62,6 +65,7 @@ function formatTgl(tgl: string) {
 // Types
 // ──────────────────────────────────────────
 type Sumber = 'manual' | 'iuran' | 'honor' | 'merchant' | 'kasbon' | 'koreksi'
+export type FinanceTab = 'ledger' | 'reconciliation' | 'pnl' | 'balance_sheet'
 
 interface TransaksiUnified {
   id: string
@@ -76,6 +80,7 @@ interface TransaksiUnified {
   metode?: string
   canEdit: boolean
   canDelete: boolean
+  is_reconciled?: boolean
 }
 
 interface EditForm {
@@ -105,6 +110,9 @@ const SUMBER_CONFIG: Record<Sumber, { label: string; color: 'primary' | 'seconda
 export default function AdminKeuanganPage() {
   const now = new Date()
 
+  // ── Tab state
+  const [activeTab, setActiveTab] = useState<FinanceTab>('ledger')
+
   // ── Filter state
   const [tahunFilter, setTahunFilter] = useState(String(now.getFullYear()))
   const [bulanFilter, setBulanFilter] = useState('0') // '0' = Semua Bulan
@@ -116,6 +124,9 @@ export default function AdminKeuanganPage() {
   const [iuranLunas, setIuranLunas] = useState<{ bulan: number; tahun: number; total: number; keterangan: string; tgl: string; id: string; nominal: number; siswa_nama: string }[]>([])
   const [honorDibayar, setHonorDibayar] = useState<{ bulan: number; tahun: number; total: number; tgl: string; id: string; pelatih_nama: string }[]>([])
   const [merchantLunas, setMerchantLunas] = useState<{ bulan: number; tahun: number; total: number; keterangan: string; tgl: string; id: string; siswa_nama: string }[]>([])
+  const [unpaidIuran, setUnpaidIuran] = useState<any[]>([])
+  const [activeKasbon, setActiveKasbon] = useState<any[]>([])
+  const [unpaidHonor, setUnpaidHonor] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   // ── Add form state
@@ -233,6 +244,28 @@ export default function AdminKeuanganPage() {
     })
     setMerchantLunas(merchantMapped)
 
+    // 5. Piutang Iuran (belum bayar)
+    const { data: unpaidIuranData } = await supabase
+      .from('iuran')
+      .select('id, bulan, tahun, nominal, siswa:siswa_id(nama)')
+      .eq('tahun', tahun)
+      .eq('status_bayar', 'belum_bayar')
+    setUnpaidIuran(unpaidIuranData || [])
+
+    // 6. Kasbon Pelatih aktif (sisa_hutang > 0)
+    const { data: activeKasbonData } = await supabase
+      .from('kasbon_pelatih')
+      .select('id, sisa_hutang, tgl_pinjam, keterangan, pelatih:pelatih_id(nama)')
+      .gt('sisa_hutang', 0)
+    setActiveKasbon(activeKasbonData || [])
+
+    // 7. Liabilitas Honor Pelatih (belum dibayar)
+    const { data: unpaidHonorData } = await supabase
+      .from('payroll_details')
+      .select('id, total_payout, potongan_kasbon, honor_bersih, pelatih:pelatih_id(nama)')
+      .eq('status_dibayar', false)
+    setUnpaidHonor(unpaidHonorData || [])
+
     setLoading(false)
   }, [tahunFilter])
 
@@ -263,6 +296,7 @@ export default function AdminKeuanganPage() {
         sumber: isMerchant ? 'merchant' : isKasbon ? 'kasbon' : isKoreksi ? 'koreksi' : ((tx.sumber as Sumber) || 'manual'),
         canEdit,
         canDelete: canEdit,
+        is_reconciled: (tx as any).is_reconciled ?? false,
       })
     }
 
@@ -420,6 +454,114 @@ export default function AdminKeuanganPage() {
       margin,
     }
   }, [allTransaksi, bulanFilter])
+
+  // ── Detailed Multi-step P&L Statement (for Laporan Laba Rugi Tab)
+  const pnlDetailed = useMemo<PnLDataDetailed>(() => {
+    const list = scopedTransaksi
+
+    // Pendapatan Operasional
+    const revIuran = list.filter(t => t.sumber === 'iuran').reduce((s, t) => s + t.nominal, 0)
+    const revMerchant = list.filter(t => t.sumber === 'merchant').reduce((s, t) => s + t.nominal, 0)
+    const revUjianEvent = list.filter(t => t.sumber === 'manual' && t.jenis === 'income' && (
+      t.kategori.includes('Ujian') || t.kategori.includes('Event') || t.kategori.includes('Kejuaraan')
+    )).reduce((s, t) => s + t.nominal, 0)
+    const revOthers = list.filter(t => t.sumber === 'manual' && t.jenis === 'income' && !(
+      t.kategori.includes('Ujian') || t.kategori.includes('Event') || t.kategori.includes('Kejuaraan')
+    )).reduce((s, t) => s + t.nominal, 0)
+    const grossRev = revIuran + revMerchant + revUjianEvent + revOthers
+
+    // Beban Operasional
+    const expHonor = list.filter(t => t.sumber === 'honor' || t.kategori === 'Honor Pelatih' || t.kategori.includes('Honor Non-Payroll')).reduce((s, t) => s + t.nominal, 0)
+    const expPerlengkapan = list.filter(t => t.kategori.includes('Perlengkapan')).reduce((s, t) => s + t.nominal, 0)
+    const expSewa = list.filter(t => t.kategori.includes('Sewa')).reduce((s, t) => s + t.nominal, 0)
+    const expKonsumsi = list.filter(t => t.kategori.includes('Konsumsi')).reduce((s, t) => s + t.nominal, 0)
+    const expAtkAdmin = list.filter(t => t.kategori.includes('Administrasi') || t.kategori.includes('ATK')).reduce((s, t) => s + t.nominal, 0)
+    const expOthers = list.filter(t => t.jenis === 'expense' && t.sumber !== 'kasbon' && t.sumber !== 'koreksi' && !(
+      t.sumber === 'honor' || t.kategori === 'Honor Pelatih' || t.kategori.includes('Honor Non-Payroll') ||
+      t.kategori.includes('Perlengkapan') || t.kategori.includes('Sewa') ||
+      t.kategori.includes('Konsumsi') || t.kategori.includes('Administrasi') || t.kategori.includes('ATK')
+    )).reduce((s, t) => s + t.nominal, 0)
+    const totalExp = expHonor + expPerlengkapan + expSewa + expKonsumsi + expAtkAdmin + expOthers
+
+    const operatingProfit = grossRev - totalExp
+    const operatingMargin = grossRev > 0 ? Math.round((operatingProfit / grossRev) * 100) : 0
+
+    // Pos Non-Operasional (Pemberian Kasbon & Koreksi Selisih Saldo Kas)
+    const nonOpKasbon = list.filter(t => t.sumber === 'kasbon' || t.kategori.includes('Kasbon')).reduce((s, t) => s + (t.jenis === 'expense' ? -t.nominal : t.nominal), 0)
+    const nonOpKoreksi = list.filter(t => t.sumber === 'koreksi' || t.kategori.includes('Koreksi')).reduce((s, t) => s + (t.jenis === 'income' ? t.nominal : -t.nominal), 0)
+
+    const netProfit = operatingProfit + nonOpKasbon + nonOpKoreksi
+    const netMargin = grossRev > 0 ? Math.round((netProfit / grossRev) * 100) : 0
+
+    return {
+      revIuran,
+      revMerchant,
+      revUjianEvent,
+      revOthers,
+      grossRev,
+      expHonor,
+      expPerlengkapan,
+      expSewa,
+      expKonsumsi,
+      expAtkAdmin,
+      expOthers,
+      totalExp,
+      operatingProfit,
+      operatingMargin,
+      nonOpKasbon,
+      nonOpKoreksi,
+      netProfit,
+      netMargin,
+    }
+  }, [scopedTransaksi])
+
+  // ── Neraca Posisi Keuangan (Balance Sheet Position)
+  const balanceSheetData = useMemo<BalanceSheetData>(() => {
+    return {
+      saldoKasRiil: saldoBersih,
+      piutangIuran: {
+        count: unpaidIuran.length,
+        total: unpaidIuran.reduce((acc, u) => acc + Number(u.nominal || 0), 0),
+        details: unpaidIuran.map(u => ({
+          nama: u.siswa?.nama || 'Siswa',
+          nominal: Number(u.nominal || 0),
+          bulan: u.bulan,
+          tahun: u.tahun,
+        })),
+      },
+      piutangKasbon: {
+        count: activeKasbon.length,
+        total: activeKasbon.reduce((acc, k) => acc + Number(k.sisa_hutang || 0), 0),
+        details: activeKasbon.map(k => ({
+          namaPelatih: k.pelatih?.nama || 'Pelatih',
+          sisaHutang: Number(k.sisa_hutang || 0),
+          tglPinjam: k.tgl_pinjam,
+          keterangan: k.keterangan || '-',
+        })),
+      },
+      liabilitasHonor: {
+        count: unpaidHonor.length,
+        total: unpaidHonor.reduce((acc, h) => {
+          const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
+            ? Number(h.honor_bersih)
+            : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
+          return acc + net
+        }, 0),
+        details: unpaidHonor.map(h => {
+          const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
+            ? Number(h.honor_bersih)
+            : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
+          return {
+            namaPelatih: h.pelatih?.nama || 'Pelatih',
+            honorBersih: net,
+          }
+        }),
+      },
+      periodeLabel: bulanFilter === '0'
+        ? `Per 31 Des ${tahunFilter} (Tahun Buku ${tahunFilter})`
+        : `Per Akhir ${BULAN_FULL[parseInt(bulanFilter)]} ${tahunFilter}`,
+    }
+  }, [saldoBersih, unpaidIuran, activeKasbon, unpaidHonor, bulanFilter, tahunFilter])
 
   // ──────────────────────────────────────────
   // Handlers: Add
@@ -699,8 +841,58 @@ export default function AdminKeuanganPage() {
         </div>
       </div>
 
-      {/* ── Summary 3 Kartu Utama ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* ── Tab Navigation ── */}
+      <div className="flex items-center gap-2 border-b-2 border-dark pb-2 overflow-x-auto no-scrollbar">
+        <button
+          type="button"
+          onClick={() => setActiveTab('ledger')}
+          className={`px-4 py-2.5 rounded-xl font-sans font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'ledger'
+              ? 'bg-dark text-white shadow-brutal translate-y-[-2px]'
+              : 'bg-white text-dark hover:bg-dark/5 border-2 border-dark/20'
+          }`}
+        >
+          <span>📖 Buku Kas & Mutasi</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('reconciliation')}
+          className={`px-4 py-2.5 rounded-xl font-sans font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'reconciliation'
+              ? 'bg-dark text-white shadow-brutal translate-y-[-2px]'
+              : 'bg-white text-dark hover:bg-dark/5 border-2 border-dark/20'
+          }`}
+        >
+          <span>⚖️ Rekonsiliasi Bank</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('pnl')}
+          className={`px-4 py-2.5 rounded-xl font-sans font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'pnl'
+              ? 'bg-dark text-white shadow-brutal translate-y-[-2px]'
+              : 'bg-white text-dark hover:bg-dark/5 border-2 border-dark/20'
+          }`}
+        >
+          <span>📊 Laporan Laba Rugi</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('balance_sheet')}
+          className={`px-4 py-2.5 rounded-xl font-sans font-bold text-sm transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'balance_sheet'
+              ? 'bg-dark text-white shadow-brutal translate-y-[-2px]'
+              : 'bg-white text-dark hover:bg-dark/5 border-2 border-dark/20'
+          }`}
+        >
+          <span>🏛️ Neraca Posisi Keuangan</span>
+        </button>
+      </div>
+
+      {activeTab === 'ledger' && (
+        <>
+          {/* ── Summary 3 Kartu Utama ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-2 border-dark p-6">
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm text-dark/60 font-sans font-bold">💵 Total Income</span>
@@ -1130,6 +1322,33 @@ export default function AdminKeuanganPage() {
           />
         )}
       </Card>
+        </>
+      )}
+
+      {/* ── Tab: Rekonsiliasi Bank ── */}
+      {activeTab === 'reconciliation' && (
+        <BankReconciliationTab
+          transaksiList={allTransaksi}
+          saldoSistem={saldoBersih}
+          onRefresh={fetchData}
+        />
+      )}
+
+      {/* ── Tab: Laporan Laba Rugi ── */}
+      {activeTab === 'pnl' && (
+        <ProfitLossTab
+          pnl={pnlDetailed}
+          saldoKasRiil={scopedSaldo}
+          periodeLabel={exportData.periodeLabel}
+        />
+      )}
+
+      {/* ── Tab: Neraca Posisi Keuangan ── */}
+      {activeTab === 'balance_sheet' && (
+        <BalanceSheetTab
+          data={balanceSheetData}
+        />
+      )}
 
       {/* ── Edit Modal ── */}
       {editForm && (
