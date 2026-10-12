@@ -237,6 +237,21 @@ export interface KeuanganClub {
   nominal: number
   keterangan: string
   sumber: string | null
+  is_reconciled?: boolean
+  reconciled_at?: string | null
+  created_at: string
+}
+
+export interface RekonsiliasiBank {
+  id: string
+  tgl_rekon: string
+  nama_bank: string
+  no_rekening: string
+  saldo_bank_riil: number
+  saldo_buku_sistem: number
+  selisih: number
+  status: 'cocok' | 'ada_selisih'
+  catatan?: string | null
   created_at: string
 }
 
