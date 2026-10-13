@@ -122,6 +122,7 @@ export function BankReconciliationTab({
       showToast('⚠️ Gagal mengubah status: ' + res.message)
     } else {
       showToast(next ? '✅ Transaksi ditandai cocok (Reconciled)' : 'ℹ️ Transaksi ditandai belum cocok')
+      onRefresh().catch(console.error)
     }
   }
 

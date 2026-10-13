@@ -80,7 +80,9 @@ export function BalanceSheetTab({ data }: BalanceSheetTabProps) {
           <div>
             <div className="text-xs font-bold text-dark/60 uppercase tracking-wide flex justify-between items-center">
               <span>💎 Ekuitas Bersih (Net Worth)</span>
-              <Badge color="primary">Sehat</Badge>
+              <Badge color={ekuitasBersih >= 0 ? 'primary' : 'accent'}>
+                {ekuitasBersih >= 0 ? 'Surplus' : 'Defisit'}
+              </Badge>
             </div>
             <div className="text-2xl font-bold text-green-800 mt-1">{formatRupiah(ekuitasBersih)}</div>
           </div>

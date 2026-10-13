@@ -174,49 +174,66 @@ export default function AdminKeuanganPage() {
       .order('tgl', { ascending: false })
     setManualList((txData || []) as KeuanganClub[])
 
-    // 2. Iuran lunas — per-record (untuk riwayat detail)
+    // 2. Iuran lunas — filter berdasarkan tgl_bayar (tanggal uang riil masuk ke kas),
+    //    BUKAN tahun periode SPP. Ini mencegah pembayaran lintas tahun hilang dari buku kas.
     const { data: iuranData } = await supabase
       .from('iuran')
-      .select('id, bulan, tahun, nominal, tgl_bayar, metode, siswa:siswa_id(nama)')
-      .eq('tahun', tahun)
+      .select('id, bulan, tahun, nominal, tgl_bayar, metode, is_reconciled, siswa:siswa_id(nama)')
       .eq('status_bayar', 'lunas')
+      .not('tgl_bayar', 'is', null)
+      .gte('tgl_bayar', `${tahun}-01-01`)
+      .lte('tgl_bayar', `${tahun}-12-31`)
       .order('tgl_bayar', { ascending: false })
 
-    const iuranMapped = (iuranData || []).map((i: any) => ({
-      id: i.id,
-      bulan: i.bulan,
-      tahun: i.tahun,
-      nominal: Number(i.nominal),
-      tgl: i.tgl_bayar ? i.tgl_bayar.split('T')[0] : `${i.tahun}-${String(i.bulan).padStart(2, '0')}-01`,
-      keterangan: `Iuran ${BULAN_FULL[i.bulan]} ${i.tahun}${i.metode ? ` · ${i.metode.toUpperCase()}` : ''}`,
-      total: Number(i.nominal),
-      siswa_nama: i.siswa?.nama || 'Siswa',
-      metode: i.metode || 'tunai',
-    }))
+    const iuranMapped = (iuranData || []).map((i: any) => {
+      // Gunakan tanggal bayar riil untuk posisi kas; tahun tagihan SPP hanya sebagai keterangan
+      const tglBayar = i.tgl_bayar ? i.tgl_bayar.split('T')[0] : `${i.tahun}-${String(i.bulan).padStart(2, '0')}-01`
+      const d = new Date(tglBayar + 'T00:00:00')
+      return {
+        id: i.id,
+        bulan: !isNaN(d.getMonth()) ? d.getMonth() + 1 : i.bulan, // bulan uang masuk, bukan bulan tagihan
+        tahun: !isNaN(d.getFullYear()) ? d.getFullYear() : i.tahun, // tahun uang masuk
+        nominal: Number(i.nominal),
+        tgl: tglBayar,
+        keterangan: `Iuran ${BULAN_FULL[i.bulan]} ${i.tahun}${i.metode ? ` · ${i.metode.toUpperCase()}` : ''}`,
+        total: Number(i.nominal),
+        siswa_nama: i.siswa?.nama || 'Siswa',
+        metode: i.metode || 'tunai',
+        is_reconciled: Boolean(i.is_reconciled),
+      }
+    })
     setIuranLunas(iuranMapped)
 
-    // 3. Honor dibayar — dari payroll_details + payroll_runs (sistem payroll baru)
+    // 3. Honor dibayar — filter berdasarkan tgl_dibayar (tanggal kas keluar riil),
+    //    BUKAN tahun payroll run. Ini mencegah honor yang ditransfer lintas tahun hilang.
     const { data: honorData } = await supabase
       .from('payroll_details')
-      .select('id, total_payout, potongan_kasbon, honor_bersih, tgl_dibayar, pelatih:pelatih_id(nama), payroll_run:payroll_run_id(bulan, tahun)')
+      .select('id, total_payout, potongan_kasbon, honor_bersih, tgl_dibayar, is_reconciled, pelatih:pelatih_id(nama), payroll_run:payroll_run_id(bulan, tahun)')
       .eq('status_dibayar', true)
+      .not('tgl_dibayar', 'is', null)
+      .gte('tgl_dibayar', `${tahun}-01-01`)
+      .lte('tgl_dibayar', `${tahun}-12-31`)
       .order('tgl_dibayar', { ascending: false })
 
-    const honorMapped = (honorData || [])
-      .filter((h: any) => h.payroll_run?.tahun === tahun)
-      .map((h: any) => {
-        const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
-          ? Number(h.honor_bersih)
-          : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
-        return {
-          id: h.id,
-          bulan: h.payroll_run?.bulan || 1,
-          tahun: h.payroll_run?.tahun || tahun,
-          total: net,
-          tgl: h.tgl_dibayar || `${h.payroll_run?.tahun}-${String(h.payroll_run?.bulan).padStart(2, '0')}-01`,
-          pelatih_nama: h.pelatih?.nama || 'Pelatih',
-        }
-      })
+    const honorMapped = (honorData || []).map((h: any) => {
+      const net = (h.honor_bersih !== null && h.honor_bersih !== undefined && Number(h.honor_bersih) > 0)
+        ? Number(h.honor_bersih)
+        : Math.max(0, Number(h.total_payout || 0) - Number(h.potongan_kasbon || 0))
+      // Gunakan tgl_dibayar untuk posisi kas di buku; periode payroll hanya di keterangan
+      const tglDibayar = h.tgl_dibayar || `${h.payroll_run?.tahun}-${String(h.payroll_run?.bulan).padStart(2, '0')}-01`
+      const d = new Date(tglDibayar + 'T00:00:00')
+      return {
+        id: h.id,
+        bulan: !isNaN(d.getMonth()) ? d.getMonth() + 1 : (h.payroll_run?.bulan || 1), // bulan kas keluar
+        tahun: !isNaN(d.getFullYear()) ? d.getFullYear() : tahun,
+        total: net,
+        tgl: tglDibayar,
+        pelatih_nama: h.pelatih?.nama || 'Pelatih',
+        payroll_bulan: h.payroll_run?.bulan || 1, // simpan periode payroll untuk keterangan
+        payroll_tahun: h.payroll_run?.tahun || tahun,
+        is_reconciled: Boolean(h.is_reconciled),
+      }
+    })
     setHonorDibayar(honorMapped)
 
     // 4. Pesanan Merchant (status lunas, diproses, atau siap_diambil)
@@ -322,11 +339,15 @@ export default function AdminKeuanganPage() {
         metode: (i as any).metode || 'tunai',
         canEdit: false,
         canDelete: false,
+        is_reconciled: Boolean((i as any).is_reconciled),
       })
     }
 
     // 3. Honor dibayar
     for (const h of honorDibayar) {
+      // Keterangan menggunakan periode payroll, bukan tanggal transfer
+      const payrollBulan = (h as any).payroll_bulan || h.bulan
+      const payrollTahun = (h as any).payroll_tahun || h.tahun
       list.push({
         id: `honor_${h.id}`,
         tgl: h.tgl,
@@ -334,11 +355,12 @@ export default function AdminKeuanganPage() {
         tahun: h.tahun,
         jenis: 'expense',
         kategori: 'Honor Pelatih',
-        keterangan: `Honor ${BULAN_FULL[h.bulan]} ${h.tahun} — ${h.pelatih_nama}`,
+        keterangan: `Honor ${BULAN_FULL[payrollBulan]} ${payrollTahun} — ${h.pelatih_nama}`,
         nominal: h.total,
         sumber: 'honor',
         canEdit: false,
         canDelete: false,
+        is_reconciled: Boolean((h as any).is_reconciled),
       })
     }
 
@@ -486,11 +508,14 @@ export default function AdminKeuanganPage() {
     const operatingProfit = grossRev - totalExp
     const operatingMargin = grossRev > 0 ? Math.round((operatingProfit / grossRev) * 100) : 0
 
-    // Pos Non-Operasional (Pemberian Kasbon & Koreksi Selisih Saldo Kas)
+    // Pos Non-Operasional (Informatif saja — BUKAN bagian dari Laba Bersih)
+    // Kasbon = pergerakan piutang aset (bukan beban/pendapatan)
+    // Koreksi = penyesuaian kas fisik (bukan profit/loss)
     const nonOpKasbon = list.filter(t => t.sumber === 'kasbon' || t.kategori.includes('Kasbon')).reduce((s, t) => s + (t.jenis === 'expense' ? -t.nominal : t.nominal), 0)
     const nonOpKoreksi = list.filter(t => t.sumber === 'koreksi' || t.kategori.includes('Koreksi')).reduce((s, t) => s + (t.jenis === 'income' ? t.nominal : -t.nominal), 0)
 
-    const netProfit = operatingProfit + nonOpKasbon + nonOpKoreksi
+    // Laba Bersih = murni dari operasional (kasbon & koreksi TIDAK termasuk laba)
+    const netProfit = operatingProfit
     const netMargin = grossRev > 0 ? Math.round((netProfit / grossRev) * 100) : 0
 
     return {
@@ -1209,10 +1234,10 @@ export default function AdminKeuanganPage() {
               📊 Export Excel (.xlsx)
             </Button>
             <Button
-              variant="dark"
+              variant="accent"
               onClick={() => setPdfPreviewOpen(true)}
               disabled={filteredTransaksi.length === 0}
-              className="flex items-center gap-1.5 font-bold shadow-brutal text-sm text-white"
+              className="flex items-center gap-1.5 font-bold shadow-brutal text-sm !bg-dark !text-white"
             >
               📄 Cetak / PDF
             </Button>

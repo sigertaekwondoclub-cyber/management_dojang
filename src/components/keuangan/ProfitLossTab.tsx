@@ -220,36 +220,43 @@ export function ProfitLossTab({
         </Card>
       </div>
 
-      {/* ── Ringkasan Laba Bersih & Pos Non-Operasional ── */}
+      {/* ── Ringkasan Laba Bersih & Informasi Arus Kas Non-Operasional ── */}
       <Card className="border-2 border-dark bg-background">
         <h3 className="font-bold font-sans text-dark text-base mb-3">
-          3. REKONSILIASI KEUNTUNGAN AKHIR (NET PROFIT CALCULATION)
+          3. LABA BERSIH OPERASIONAL (NET PROFIT)
         </h3>
 
         <div className="flex flex-col gap-2 text-sm font-sans">
-          <div className="flex justify-between items-center p-3 bg-white border border-dark/10 rounded-2xl">
-            <span className="font-bold text-dark">Laba Operasional Murni (Operating Profit):</span>
-            <span className="font-bold text-dark">{formatRupiah(pnl.operatingProfit)}</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-dark/70">
-            <div className="p-3 bg-white border border-dark/10 rounded-2xl flex justify-between">
-              <span>Pelunasan Kasbon Pelatih (Arus Kas Masuk):</span>
-              <span className="font-bold text-dark">+{formatRupiah(pnl.nonOpKasbon)}</span>
-            </div>
-            <div className="p-3 bg-white border border-dark/10 rounded-2xl flex justify-between">
-              <span>Koreksi Saldo Fisik / Opname Bank:</span>
-              <span className="font-bold text-dark">+{formatRupiah(pnl.nonOpKoreksi)}</span>
-            </div>
-          </div>
-
-          <div className={`flex justify-between items-center p-4 border-2 rounded-2xl mt-1 ${isSurplus ? 'bg-primary/20 border-primary text-dark' : 'bg-accent/20 border-accent text-accent'}`}>
+          <div className={`flex justify-between items-center p-4 border-2 rounded-2xl ${isSurplus ? 'bg-primary/20 border-primary text-dark' : 'bg-accent/20 border-accent text-accent'}`}>
             <div>
-              <div className="font-bold font-sans text-base">LABA BERSIH TAHUN INI (NET PROFIT)</div>
-              <div className="text-xs text-dark/60">Keuntungan murni setelah seluruh beban operasional club</div>
+              <div className="font-bold font-sans text-base">LABA BERSIH OPERASIONAL (NET PROFIT)</div>
+              <div className="text-xs text-dark/60">Keuntungan murni dari aktivitas operasional club (Pendapatan – Beban)</div>
             </div>
             <div className="text-2xl font-bold font-sans">{formatRupiah(pnl.netProfit)}</div>
           </div>
+
+          {/* Informasi Arus Kas Non-Operasional — informatif, bukan komponen laba */}
+          {(pnl.nonOpKasbon !== 0 || pnl.nonOpKoreksi !== 0) && (
+            <div className="mt-1">
+              <div className="text-xs font-bold text-dark/50 uppercase tracking-wide mb-1.5">
+                📋 Informasi Arus Kas Non-Operasional (tidak termasuk laba)
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-dark/70">
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl flex justify-between">
+                  <span>Pergerakan Kas Kasbon Pelatih:</span>
+                  <span className={`font-bold ${pnl.nonOpKasbon >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {pnl.nonOpKasbon >= 0 ? '+' : ''}{formatRupiah(pnl.nonOpKasbon)}
+                  </span>
+                </div>
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-2xl flex justify-between">
+                  <span>Koreksi Saldo Fisik / Opname:</span>
+                  <span className={`font-bold ${pnl.nonOpKoreksi >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {pnl.nonOpKoreksi >= 0 ? '+' : ''}{formatRupiah(pnl.nonOpKoreksi)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -260,14 +267,17 @@ export function ProfitLossTab({
           <div>
             <h4 className="font-bold text-blue-950 text-sm">Mengapa Laba Bersih ({formatRupiah(pnl.netProfit)}) Berbeda dengan Saldo Kas Riil ({formatRupiah(saldoKasRiil)})?</h4>
             <p className="text-xs text-blue-900/80 mt-0.5 leading-relaxed">
-              <b>Laba Bersih</b> mencerminkan keuntungan dari aktivitas usaha dojang (pendapatan dikurangi biaya). 
-              Sedangkan <b>Saldo Kas Riil</b> adalah total fisik uang tunai di bank dan kas dojang saat ini (termasuk modal awal kas, saldo koreksi opname, dan arus pengembalian kasbon pelatih).
+              <b>Laba Bersih</b> mencerminkan keuntungan dari aktivitas usaha dojang (pendapatan dikurangi biaya operasional). 
+              Sedangkan <b>Saldo Kas Riil</b> adalah total fisik uang di bank & kas (termasuk modal awal, arus kasbon pelatih, dan koreksi opname fisik).
+              Perbedaan keduanya adalah hal yang <b>normal</b> dalam standar akuntansi.
             </p>
           </div>
         </div>
         <div className="shrink-0 bg-white border-2 border-blue-300 px-4 py-2 rounded-2xl text-right">
           <div className="text-[10px] text-dark/50 uppercase font-bold">Selisih Kas vs Laba</div>
-          <div className="font-bold text-blue-900 text-sm">+{formatRupiah(cashDifference)}</div>
+          <div className={`font-bold text-sm ${cashDifference >= 0 ? 'text-blue-900' : 'text-red-700'}`}>
+            {cashDifference >= 0 ? '+' : ''}{formatRupiah(cashDifference)}
+          </div>
         </div>
       </div>
     </div>

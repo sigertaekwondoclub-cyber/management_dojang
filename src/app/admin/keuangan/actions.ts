@@ -9,22 +9,61 @@ const supabaseAdmin = createClient(
 )
 
 /**
- * Toggle status rekonsiliasi per transaksi di keuangan_club
+ * Toggle status rekonsiliasi per transaksi di keuangan_club, iuran, atau payroll_details
  */
 export async function toggleReconcileStatus(transaksiId: string, newStatus: boolean) {
   try {
     if (!transaksiId) throw new Error('ID Transaksi tidak valid')
 
-    // Jika id berasal dari iuran atau merchant atau virtual, kita skip update tabel keuangan_club
-    if (transaksiId.startsWith('iuran_') || transaksiId.startsWith('merchant_') || transaksiId.startsWith('honor_')) {
+    const now = newStatus ? new Date().toISOString() : null
+
+    // 1. Pembayaran Iuran
+    if (transaksiId.startsWith('iuran_')) {
+      const realId = transaksiId.replace('iuran_', '')
+      const { error } = await supabaseAdmin
+        .from('iuran')
+        .update({
+          is_reconciled: newStatus,
+          reconciled_at: now,
+        })
+        .eq('id', realId)
+
+      if (error) {
+        console.warn('Gagal update is_reconciled iuran:', error.message)
+        return { success: true, fallback: true, message: error.message }
+      }
+      return { success: true }
+    }
+
+    // 2. Transfer Honor Pelatih
+    if (transaksiId.startsWith('honor_')) {
+      const realId = transaksiId.replace('honor_', '')
+      const { error } = await supabaseAdmin
+        .from('payroll_details')
+        .update({
+          is_reconciled: newStatus,
+          reconciled_at: now,
+        })
+        .eq('id', realId)
+
+      if (error) {
+        console.warn('Gagal update is_reconciled payroll_details:', error.message)
+        return { success: true, fallback: true, message: error.message }
+      }
+      return { success: true }
+    }
+
+    // 3. Fallback virtual merchant (jika belum tersimpan di keuangan_club)
+    if (transaksiId.startsWith('merchant_')) {
       return { success: true, virtual: true }
     }
 
+    // 4. Catatan kas keuangan_club
     const { error } = await supabaseAdmin
       .from('keuangan_club')
       .update({
         is_reconciled: newStatus,
-        reconciled_at: newStatus ? new Date().toISOString() : null,
+        reconciled_at: now,
       })
       .eq('id', transaksiId)
 
@@ -44,19 +83,46 @@ export async function toggleReconcileStatus(transaksiId: string, newStatus: bool
  */
 export async function bulkMarkReconciled(transaksiIds: string[]) {
   try {
+    const iuranIds = transaksiIds.filter(id => id.startsWith('iuran_')).map(id => id.replace('iuran_', ''))
+    const honorIds = transaksiIds.filter(id => id.startsWith('honor_')).map(id => id.replace('honor_', ''))
     const validIds = transaksiIds.filter(id => !id.startsWith('iuran_') && !id.startsWith('merchant_') && !id.startsWith('honor_'))
-    if (validIds.length === 0) return { success: true }
 
-    const { error } = await supabaseAdmin
-      .from('keuangan_club')
-      .update({
-        is_reconciled: true,
-        reconciled_at: new Date().toISOString(),
-      })
-      .in('id', validIds)
+    const now = new Date().toISOString()
+    const tasks = []
 
-    if (error) {
-      console.warn('Gagal bulk update is_reconciled:', error.message)
+    if (validIds.length > 0) {
+      tasks.push(async () =>
+        supabaseAdmin
+          .from('keuangan_club')
+          .update({ is_reconciled: true, reconciled_at: now })
+          .in('id', validIds)
+      )
+    }
+
+    if (iuranIds.length > 0) {
+      tasks.push(async () =>
+        supabaseAdmin
+          .from('iuran')
+          .update({ is_reconciled: true, reconciled_at: now })
+          .in('id', iuranIds)
+      )
+    }
+
+    if (honorIds.length > 0) {
+      tasks.push(async () =>
+        supabaseAdmin
+          .from('payroll_details')
+          .update({ is_reconciled: true, reconciled_at: now })
+          .in('id', honorIds)
+      )
+    }
+
+    if (tasks.length === 0) return { success: true }
+
+    const results = await Promise.all(tasks.map(t => t()))
+    const hasError = results.some(r => r?.error)
+    if (hasError) {
+      console.warn('Sebagian bulk update is_reconciled gagal')
       return { success: true, fallback: true }
     }
 
