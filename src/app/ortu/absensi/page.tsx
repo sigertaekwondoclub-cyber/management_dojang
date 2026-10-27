@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 const supabase = createClient()
 import { Card } from '@/components/ui/Card'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { AbsensiSiswa } from '@/lib/types'
 
 type StatusHadir = 'hadir' | 'izin' | 'sakit' | 'alpha'
@@ -38,7 +39,7 @@ const namaBulan = (b: string) => {
 }
 
 export default function OrtuAbsensiPage() {
-
+  const { activeChild, loading: childLoading } = useOrtuChild()
   const { month, year } = getMonthYear()
   const [filterBulan, setFilterBulan] = useState(month)
   const [filterTahun, setFilterTahun] = useState(year)
@@ -49,32 +50,16 @@ export default function OrtuAbsensiPage() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchAbsensi = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-
-    // Ambil profile ortu untuk dapatkan siswa_id
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('siswa_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.siswa_id) {
-      setError('Akun ini belum terhubung ke data siswa. Hubungi admin.')
-      setLoading(false)
+    if (!activeChild?.id) {
+      if (!childLoading) {
+        setError('Pilih profil anak atau hubungi admin.')
+        setLoading(false)
+      }
       return
     }
-
-    // Ambil nama siswa
-    const { data: siswaData } = await supabase
-      .from('siswa')
-      .select('nama')
-      .eq('id', profile.siswa_id)
-      .single()
-    if (siswaData) setNamaSiswa(siswaData.nama)
+    setLoading(true)
+    setError(null)
+    setNamaSiswa(activeChild.nama)
 
     // Hitung range tanggal
     const bulanInt = parseInt(filterBulan)
@@ -85,18 +70,18 @@ export default function OrtuAbsensiPage() {
     const { data, error: fetchErr } = await supabase
       .from('absensi_siswa')
       .select('*')
-      .eq('siswa_id', profile.siswa_id)
+      .eq('siswa_id', activeChild.id)
       .gte('tgl', startDate)
       .lte('tgl', endDate)
       .order('tgl', { ascending: false })
 
     if (fetchErr) {
-      setError('Gagal memuat data absensi.')
+      setError('Gagal memuat data absensi: ' + fetchErr.message)
     } else {
       setAbsensiList((data || []) as AbsensiSiswa[])
     }
     setLoading(false)
-  }, [filterBulan, filterTahun])
+  }, [activeChild, childLoading, filterBulan, filterTahun])
 
   useEffect(() => {
     fetchAbsensi()

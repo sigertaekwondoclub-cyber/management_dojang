@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useKeranjang } from '@/context/KeranjangContext'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 
 const supabase = createClient()
 function formatRupiah(n: number) {
@@ -14,6 +15,7 @@ function formatRupiah(n: number) {
 }
 
 export default function KeranjangPage() {
+  const { activeChild } = useOrtuChild()
   const { items, hapusItem, updateQty, clearKeranjang, totalHarga } = useKeranjang()
   const [siswaId, setSiswaId] = useState<string | null>(null)
   const [checkingOut, setCheckingOut] = useState(false)
@@ -33,11 +35,15 @@ export default function KeranjangPage() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase.from('profiles').select('siswa_id').eq('id', user.id).single()
-        .then(({ data }) => setSiswaId(data?.siswa_id || null))
-    })
+    if (activeChild?.id) {
+      setSiswaId(activeChild.id)
+    } else {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return
+        supabase.from('profiles').select('siswa_id').eq('id', user.id).single()
+          .then(({ data }) => setSiswaId(data?.siswa_id || null))
+      })
+    }
 
     // Fetch rekening dari pengaturan_club
     supabase.from('pengaturan_club').select('*').limit(1).single()
@@ -50,16 +56,17 @@ export default function KeranjangPage() {
           setBankInfo({ bank, nomor, atasNama })
         }
       })
-  }, [])
+  }, [activeChild])
 
   const handleCheckout = async () => {
-    if (!siswaId) { setError('Data siswa tidak ditemukan.'); return }
+    const targetSiswaId = activeChild?.id || siswaId
+    if (!targetSiswaId) { setError('Data siswa belum terhubung atau belum dipilih.'); return }
     if (items.length === 0) return
     setCheckingOut(true)
     setError(null)
 
     const { data: pesanan, error: err } = await supabase.from('pesanan_merchant')
-      .insert({ siswa_id: siswaId, total_harga: totalHarga, status: 'menunggu_pembayaran' })
+      .insert({ siswa_id: targetSiswaId, total_harga: totalHarga, status: 'menunggu_pembayaran' })
       .select().single()
 
     if (err || !pesanan) {

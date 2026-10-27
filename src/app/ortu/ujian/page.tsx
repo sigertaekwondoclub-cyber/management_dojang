@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { UjianSabuk, Siswa } from '@/lib/types'
 
 const SABUK_COLORS: Record<string, { bg: string; text: string; accent: string }> = {
@@ -15,6 +16,7 @@ const SABUK_COLORS: Record<string, { bg: string; text: string; accent: string }>
 }
 
 export default function OrtuUjianPage() {
+  const { activeChild, loading: childLoading } = useOrtuChild()
   const [riwayat, setRiwayat] = useState<UjianSabuk[]>([])
   const [siswaInfo, setSiswaInfo] = useState<Siswa | null>(null)
   const [loading, setLoading] = useState(true)
@@ -25,46 +27,37 @@ export default function OrtuUjianPage() {
   const [sesiHadir, setSesiHadir] = useState(0)
 
   const fetchRiwayat = useCallback(async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('siswa_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.siswa_id) {
-      setError('Akun belum terhubung ke data siswa. Hubungi admin.')
-      setLoading(false)
+    if (!activeChild?.id) {
+      if (!childLoading) {
+        setError('Pilih profil anak atau hubungi admin jika akun belum terhubung.')
+        setLoading(false)
+      }
       return
     }
-
-    // Get Siswa Info
-    const { data: sData } = await supabase
-      .from('siswa')
-      .select('*')
-      .eq('id', profile.siswa_id)
-      .single()
-    if (sData) setSiswaInfo(sData as Siswa)
+    setLoading(true)
+    setError(null)
+    setSiswaInfo(activeChild)
 
     // Get Ujian Lulus (Riwayat Sabuk)
-    const { data: uData } = await supabase
+    const { data: uData, error: uErr } = await supabase
       .from('ujian_sabuk')
       .select('*')
-      .eq('siswa_id', profile.siswa_id)
+      .eq('siswa_id', activeChild.id)
       .eq('hasil', 'lulus')
       .order('tgl_ujian', { ascending: false })
 
-    if (uData) setRiwayat(uData as UjianSabuk[])
+    if (uErr) {
+      setError('Gagal memuat riwayat ujian: ' + uErr.message)
+    } else {
+      setRiwayat((uData || []) as UjianSabuk[])
+    }
 
     // Hitung sesi latihan hadir sejak ujian terakhir (Target 12 Sesi)
     const lastExamDate = uData && uData.length > 0 ? new Date(uData[0].tgl_ujian).toISOString().split('T')[0] : null
     let absQuery = supabase
       .from('absensi_siswa')
       .select('id, tgl, status_hadir')
-      .eq('siswa_id', profile.siswa_id)
+      .eq('siswa_id', activeChild.id)
       .eq('status_hadir', 'hadir')
 
     if (lastExamDate) {
@@ -75,7 +68,7 @@ export default function OrtuUjianPage() {
     setSesiHadir(absData?.length || 0)
 
     setLoading(false)
-  }, [supabase])
+  }, [activeChild, childLoading, supabase])
 
   useEffect(() => {
     fetchRiwayat()

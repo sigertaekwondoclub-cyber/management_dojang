@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { PesananMerchant, StatusPesanan } from '@/lib/types'
 
 const supabase = createClient()
@@ -25,6 +26,7 @@ function formatTgl(s: string) {
 }
 
 export default function OrtuPesananMerchantPage() {
+  const { activeChild, childrenList, loading: childLoading } = useOrtuChild()
   const [pesananList, setPesananList] = useState<PesananMerchant[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<PesananMerchant | null>(null)
@@ -33,18 +35,23 @@ export default function OrtuPesananMerchantPage() {
   const [error, setError] = useState<string | null>(null)
 
   const fetchPesanan = useCallback(async () => {
+    const childIds = childrenList.length > 0
+      ? childrenList.map(c => c.id)
+      : (activeChild?.id ? [activeChild.id] : [])
+
+    if (childIds.length === 0) {
+      if (!childLoading) setLoading(false)
+      return
+    }
+
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data: profile } = await supabase.from('profiles').select('siswa_id').eq('id', user.id).single()
-    if (!profile?.siswa_id) { setLoading(false); return }
     const { data } = await supabase.from('pesanan_merchant')
       .select('*, pesanan_item(*, produk_merchant:produk_id(nama, foto_url), produk_varian:varian_id(ukuran))')
-      .eq('siswa_id', profile.siswa_id)
+      .in('siswa_id', childIds)
       .order('created_at', { ascending: false })
     setPesananList((data || []) as PesananMerchant[])
     setLoading(false)
-  }, [])
+  }, [activeChild, childrenList, childLoading])
 
   useEffect(() => {
     fetchPesanan()

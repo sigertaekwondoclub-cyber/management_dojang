@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { EventKompetisi, EventPeserta, Siswa } from '@/lib/types'
 
 function formatRupiah(n: number) {
@@ -12,6 +13,7 @@ function formatRupiah(n: number) {
 }
 
 export default function OrtuEventPage() {
+  const { activeChild, loading: childLoading } = useOrtuChild()
   const [eventList, setEventList] = useState<EventKompetisi[]>([])
   const [riwayat, setRiwayat] = useState<EventPeserta[]>([])
   const [siswaInfo, setSiswaInfo] = useState<Siswa | null>(null)
@@ -22,29 +24,16 @@ export default function OrtuEventPage() {
   const supabase = createClient()
 
   const fetchData = useCallback(async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('siswa_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.siswa_id) {
-      setError('Akun belum terhubung ke data siswa. Hubungi admin.')
-      setLoading(false)
+    if (!activeChild?.id) {
+      if (!childLoading) {
+        setError('Pilih profil anak atau hubungi admin jika akun belum terhubung.')
+        setLoading(false)
+      }
       return
     }
-
-    // Get Siswa Info
-    const { data: sData } = await supabase
-      .from('siswa')
-      .select('*')
-      .eq('id', profile.siswa_id)
-      .single()
-    if (sData) setSiswaInfo(sData as Siswa)
+    setLoading(true)
+    setError(null)
+    setSiswaInfo(activeChild)
 
     // Get All Events (Upcoming)
     const today = new Date().toISOString().split('T')[0]
@@ -56,15 +45,15 @@ export default function OrtuEventPage() {
     if (eData) setEventList(eData as EventKompetisi[])
 
     // Get Riwayat Pendaftaran anak ini
-    const { data: pData } = await supabase
+    const { data: pData, error: pErr } = await supabase
       .from('event_peserta')
       .select('*, event_kompetisi(*)')
-      .eq('siswa_id', profile.siswa_id)
+      .eq('siswa_id', activeChild.id)
       .order('created_at', { ascending: false })
-    if (pData) setRiwayat(pData as EventPeserta[])
+    if (!pErr && pData) setRiwayat(pData as EventPeserta[])
 
     setLoading(false)
-  }, [supabase])
+  }, [activeChild, childLoading, supabase])
 
   useEffect(() => {
     fetchData()

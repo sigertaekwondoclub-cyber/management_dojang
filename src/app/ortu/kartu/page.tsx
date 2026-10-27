@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { QRCodeSVG } from 'qrcode.react'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { KartuAnggota } from '@/lib/types'
 
 const SABUK_COLORS: Record<string, { bg: string; text: string; accent: string }> = {
@@ -21,6 +22,7 @@ function getSabukColors(sabuk: string) {
 
 export default function OrtuKartuPage() {
   const supabase = createClient()
+  const { activeChild, loading: childLoading } = useOrtuChild()
 
   const [kartu, setKartu] = useState<(KartuAnggota & {
     siswa: { nama: string; sabuk_saat_ini: string; foto_url: string | null; program_kelas: { nama_program: string } | null }
@@ -30,30 +32,26 @@ export default function OrtuKartuPage() {
   const [fotoUrl, setFotoUrl] = useState<string | null>(null)
 
   const fetchKartu = useCallback(async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('siswa_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.siswa_id) {
-      setError('Akun belum terhubung ke data siswa. Hubungi admin.')
-      setLoading(false)
+    if (!activeChild?.id) {
+      if (!childLoading) {
+        setError('Pilih profil anak atau hubungi admin.')
+        setLoading(false)
+      }
       return
     }
+    setLoading(true)
+    setError(null)
+    setFotoUrl(null)
 
     const { data: kartuData, error: kartuErr } = await supabase
       .from('kartu_anggota')
       .select('*, siswa:siswa_id(nama, sabuk_saat_ini, foto_url, program_kelas:program_kelas_id(nama_program))')
-      .eq('siswa_id', profile.siswa_id)
-      .single()
+      .eq('siswa_id', activeChild.id)
+      .maybeSingle()
 
     if (kartuErr || !kartuData) {
-      setError('Kartu anggota belum diterbitkan. Hubungi admin untuk generate kartu.')
+      setError(`Kartu anggota untuk ${activeChild.nama} belum diterbitkan. Hubungi admin untuk generate kartu.`)
+      setKartu(null)
       setLoading(false)
       return
     }

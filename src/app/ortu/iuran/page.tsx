@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { useOrtuChild } from '@/context/OrtuChildContext'
 import type { Iuran } from '@/lib/types'
 
 type StatusBayar = 'belum_bayar' | 'menunggu_verifikasi' | 'lunas' | 'ditolak'
@@ -25,6 +26,7 @@ function formatRupiah(n: number) {
 
 export default function OrtuIuranPage() {
   const supabase = createClient()
+  const { activeChild, loading: childLoading } = useOrtuChild()
 
   const [siswaId, setSiswaId] = useState<string | null>(null)
   const [namaSiswa, setNamaSiswa] = useState('')
@@ -36,49 +38,45 @@ export default function OrtuIuranPage() {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const fetchData = useCallback(async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('siswa_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!profile?.siswa_id) {
-      setError('Akun belum terhubung ke siswa. Hubungi admin.')
-      setLoading(false)
+    if (!activeChild?.id) {
+      if (!childLoading) {
+        setError('Pilih profil anak atau hubungi admin jika akun belum terhubung.')
+        setLoading(false)
+      }
       return
     }
-
-    setSiswaId(profile.siswa_id)
-
-    const { data: siswa } = await supabase.from('siswa').select('nama').eq('id', profile.siswa_id).single()
-    if (siswa) setNamaSiswa(siswa.nama)
+    setLoading(true)
+    setError(null)
+    setSiswaId(activeChild.id)
+    setNamaSiswa(activeChild.nama)
 
     const { data: iuranData, error: iuranErr } = await supabase
       .from('iuran')
       .select('*')
-      .eq('siswa_id', profile.siswa_id)
+      .eq('siswa_id', activeChild.id)
       .order('tahun', { ascending: false })
       .order('bulan', { ascending: false })
 
-    if (!iuranErr) setIuranList((iuranData || []) as Iuran[])
+    if (iuranErr) {
+      setError('Gagal memuat data iuran: ' + iuranErr.message)
+    } else {
+      setIuranList((iuranData || []) as Iuran[])
+    }
     setLoading(false)
-  }, [supabase])
+  }, [activeChild, childLoading, supabase])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   const handleUploadBukti = async (iuranId: string, file: File) => {
-    if (!siswaId) return
+    const targetId = activeChild?.id || siswaId
+    if (!targetId) return
     setUploading(iuranId)
     setError(null)
     setSuccessMsg(null)
 
     // Upload ke storage bucket
     const ext = file.name.split('.').pop()
-    const filePath = `${siswaId}/${iuranId}.${ext}`
+    const filePath = `${targetId}/${iuranId}.${ext}`
 
     const { error: uploadErr } = await supabase.storage
       .from('bukti-transfer')

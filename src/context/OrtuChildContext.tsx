@@ -6,6 +6,8 @@ import type { Siswa } from '@/lib/types'
 
 const supabase = createClient()
 
+import { getOrtuChildrenAction } from '@/app/ortu/actions'
+
 interface OrtuChildContextType {
   activeChild: Siswa | null
   childrenList: Siswa[]
@@ -30,67 +32,72 @@ export function OrtuChildProvider({ children }: { children: React.ReactNode }) {
   const fetchChildren = useCallback(async () => {
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+      // Prioritaskan pemanggilan via Server Action (bypasses client-side RLS)
+      const res = await getOrtuChildrenAction()
+      let allSiblings: Siswa[] = []
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('siswa_id')
-        .eq('id', user.id)
-        .single()
+      if (res.success && res.children.length > 0) {
+        allSiblings = res.children
+      } else {
+        // Fallback jika server action bermasalah
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setLoading(false)
+          return
+        }
 
-      if (!profile?.siswa_id) {
-        setLoading(false)
-        return
-      }
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('siswa_id')
+          .eq('id', user.id)
+          .single()
 
-      // 1. Ambil data siswa utama yang terhubung di profile
-      const { data: primarySiswa } = await supabase
-        .from('siswa')
-        .select('*, program_kelas(nama_program)')
-        .eq('id', profile.siswa_id)
-        .single()
+        if (!profile?.siswa_id) {
+          setLoading(false)
+          return
+        }
 
-      if (!primarySiswa) {
-        setLoading(false)
-        return
-      }
-
-      let allSiblings: Siswa[] = [primarySiswa as Siswa]
-
-      // 2. Jika no_hp_ortu terisi, cari anak-anak lain yang nomor HP ortunya sama
-      if (primarySiswa.no_hp_ortu) {
-        const cleanHP = primarySiswa.no_hp_ortu.trim()
-        const { data: siblingData } = await supabase
+        const { data: primarySiswa } = await supabase
           .from('siswa')
           .select('*, program_kelas(nama_program)')
-          .eq('no_hp_ortu', cleanHP)
-          .eq('status_aktif', true)
-          .order('nama', { ascending: true })
+          .eq('id', profile.siswa_id)
+          .single()
 
-        if (siblingData && siblingData.length > 0) {
-          const map = new Map<string, Siswa>()
-          map.set(primarySiswa.id, primarySiswa as Siswa)
-          for (const s of siblingData) {
-            map.set(s.id, s as Siswa)
+        if (primarySiswa) {
+          allSiblings = [primarySiswa as Siswa]
+          if (primarySiswa.no_hp_ortu) {
+            const cleanHP = primarySiswa.no_hp_ortu.trim()
+            const { data: siblingData } = await supabase
+              .from('siswa')
+              .select('*, program_kelas(nama_program)')
+              .eq('no_hp_ortu', cleanHP)
+              .eq('status_aktif', true)
+              .order('nama', { ascending: true })
+
+            if (siblingData && siblingData.length > 0) {
+              const map = new Map<string, Siswa>()
+              map.set(primarySiswa.id, primarySiswa as Siswa)
+              for (const s of siblingData) {
+                map.set(s.id, s as Siswa)
+              }
+              allSiblings = Array.from(map.values())
+            }
           }
-          allSiblings = Array.from(map.values())
         }
       }
 
       setChildrenList(allSiblings)
 
-      // 3. Tentukan active child (cek localStorage jika ada)
+      // Tentukan active child (cek localStorage jika ada)
       const savedChildId = typeof window !== 'undefined' ? localStorage.getItem('siger_active_child_id') : null
       const matchedSaved = allSiblings.find(s => s.id === savedChildId)
 
       if (matchedSaved) {
         setActiveChild(matchedSaved)
+      } else if (allSiblings.length > 0) {
+        setActiveChild(allSiblings[0])
       } else {
-        setActiveChild(allSiblings[0] || (primarySiswa as Siswa))
+        setActiveChild(null)
       }
     } catch (err) {
       console.error('Error loading parent children:', err)
