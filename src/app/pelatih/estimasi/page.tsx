@@ -123,7 +123,7 @@ export default function PelatihEstimasiPage() {
     const [configRes, iuranLunasRes, iuranAllRes, classesRes, studentsRes, absensiAllRes, allCoachesRes] = await Promise.all([
       supabase.from('pengaturan_club').select('pct_coach_pool, pct_founder_margin').limit(1).maybeSingle(),
       supabase.from('iuran').select('nominal').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'lunas'),
-      supabase.from('iuran').select('nominal').eq('bulan', bulan).eq('tahun', tahun),
+      supabase.from('iuran').select('nominal, status_bayar, siswa:siswa_id(status_aktif)').eq('bulan', bulan).eq('tahun', tahun),
       supabase.from('program_kelas').select('*').eq('status_aktif', true),
       supabase.from('siswa').select('program_kelas_id').eq('status_aktif', true),
       supabase.from('absensi_pelatih').select('id, program_kelas_id, pelatih_id').gte('tgl', startDate).lte('tgl', endDate),
@@ -133,7 +133,13 @@ export default function PelatihEstimasiPage() {
     const pctCoachPool = Number(configRes.data?.pct_coach_pool ?? 0.45)
     const pctFounderMargin = Number(configRes.data?.pct_founder_margin ?? 0.08)
     const totalIncomeLunas = (iuranLunasRes.data || []).reduce((a, c) => a + Number(c.nominal || 0), 0)
-    const totalIncomeAll = (iuranAllRes.data || []).reduce((a, c) => a + Number(c.nominal || 0), 0)
+    const totalIncomeAll = (iuranAllRes.data || []).reduce((a: number, c: any) => {
+      const isAktif = c.siswa?.status_aktif !== false
+      if (c.status_bayar === 'lunas' || isAktif) {
+        return a + Number(c.nominal || 0)
+      }
+      return a
+    }, 0)
     const coachPoolAmount = totalIncomeLunas * pctCoachPool
     const founderMarginAmount = totalIncomeLunas * pctFounderMargin
 

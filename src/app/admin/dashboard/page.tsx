@@ -72,7 +72,7 @@ export default function AdminDashboardPage() {
       supabase.from('siswa').select('status_aktif'),
       supabase.from('pendaftaran_siswa').select('id').eq('status', 'pending'),
       supabase.from('pelatih').select('id', { count: 'exact', head: true }).eq('status_aktif', true),
-      supabase.from('iuran').select('nominal, status_bayar').eq('bulan', bulan).eq('tahun', tahun),
+      supabase.from('iuran').select('nominal, status_bayar, siswa:siswa_id(status_aktif)').eq('bulan', bulan).eq('tahun', tahun),
       supabase.from('keuangan_club').select('jenis, nominal, sumber, kategori, keterangan').gte('tgl', startBulan),
       // Honor sudah dibayar: dari payroll_details dengan status_dibayar = true
       payrollRunId
@@ -86,7 +86,7 @@ export default function AdminDashboardPage() {
       // NEW queries
       supabase.from('absensi_siswa').select('status_hadir, kelas').eq('tgl', today),
       supabase.from('absensi_siswa').select('siswa_id, kelas, status_hadir').gte('tgl', startBulan).lte('tgl', today),
-      supabase.from('iuran').select('siswa_id, siswa:siswa_id(nama)').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'belum_bayar'),
+      supabase.from('iuran').select('siswa_id, siswa:siswa_id(nama, status_aktif)').eq('bulan', bulan).eq('tahun', tahun).eq('status_bayar', 'belum_bayar'),
       supabase.from('siswa').select('sabuk_saat_ini').eq('status_aktif', true),
       supabase.from('absensi_siswa').select('siswa_id, siswa:siswa_id(nama)').eq('status_hadir', 'alpha').gte('tgl', startBulan).lte('tgl', today),
       // Honor belum dibayar: dari payroll_details dengan status_dibayar = false
@@ -101,10 +101,14 @@ export default function AdminDashboardPage() {
     const pelatihAktif = pelatihResult.count || 0
 
     let iuranTotal = 0, iuranTerkumpul = 0, tagihanMenunggu = 0
-    iuranResult.data?.forEach(i => {
-      iuranTotal += Number(i.nominal)
+    iuranResult.data?.forEach((i: any) => {
+      const isAktif = i.siswa?.status_aktif !== false
+      // Hanya hitung iuran lunas atau tagihan dari siswa aktif
+      if (i.status_bayar === 'lunas' || isAktif) {
+        iuranTotal += Number(i.nominal)
+      }
       if (i.status_bayar === 'lunas') iuranTerkumpul += Number(i.nominal)
-      if (i.status_bayar === 'menunggu_verifikasi') tagihanMenunggu++
+      if (i.status_bayar === 'menunggu_verifikasi' && isAktif) tagihanMenunggu++
     })
     const merchantPemasukan = (merchantOmzetResult.data || []).reduce((acc, c) => acc + Number(c.total_harga), 0)
     let income = iuranTerkumpul + merchantPemasukan, expense = 0
@@ -151,9 +155,11 @@ export default function AdminDashboardPage() {
     })).sort((a, b) => b.total - a.total))
 
     // ── Widget 3: Siswa Belum Bayar ──
-    const blmBayar = (iuranBlmBayarResult.data || []).map((r: any) => ({
-      id: r.siswa_id, nama: (r.siswa as any)?.nama || '-',
-    }))
+    const blmBayar = (iuranBlmBayarResult.data || [])
+      .filter((r: any) => (r.siswa as any)?.status_aktif !== false)
+      .map((r: any) => ({
+        id: r.siswa_id, nama: (r.siswa as any)?.nama || '-',
+      }))
     setSiswaBlmBayar(blmBayar)
 
     // ── Widget 4: Distribusi Sabuk ──

@@ -130,7 +130,7 @@ export default function AdminLaporanPage() {
     const [iuranRes, merchantRes, manualRes, honorRes] = await Promise.all([
       supabase
         .from('iuran')
-        .select('nominal, status_bayar, siswa:siswa_id(nama, program_kelas:program_kelas_id(nama_program))')
+        .select('nominal, status_bayar, siswa:siswa_id(nama, status_aktif, program_kelas:program_kelas_id(nama_program))')
         .eq('bulan', bul).eq('tahun', tah),
       supabase
         .from('pesanan_merchant')
@@ -153,8 +153,13 @@ export default function AdminLaporanPage() {
         .maybeSingle(),
     ])
 
+    const filteredIuranRows = (iuranRes.data || []).filter((r: any) => {
+      // Pertahankan jika lunas atau jika siswa berstatus aktif
+      return r.status_bayar === 'lunas' || (r.siswa as any)?.status_aktif !== false
+    })
+
     setKeuanganData([{
-      iuranRows: iuranRes.data || [],
+      iuranRows: filteredIuranRows,
       merchantRows: merchantRes.data || [],
       transaksi: manualRes.data || [],
       payrollRun: honorRes.data || null,
