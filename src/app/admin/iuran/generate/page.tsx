@@ -25,6 +25,13 @@ interface MismatchedItem {
   nominal_baru: number
 }
 
+interface InactiveBillItem {
+  id: string
+  siswa_id: string
+  siswa_nama: string
+  nominal: number
+}
+
 export default function AdminIuranGeneratePage() {
   const now = new Date()
 
@@ -35,8 +42,10 @@ export default function AdminIuranGeneratePage() {
   const [countSiswa, setCountSiswa] = useState(0)
   const [readySiswa, setReadySiswa] = useState<any[]>([])
   const [mismatchedList, setMismatchedList] = useState<MismatchedItem[]>([])
+  const [inactiveList, setInactiveList] = useState<InactiveBillItem[]>([])
   const [generating, setGenerating] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,10 +66,10 @@ export default function AdminIuranGeneratePage() {
 
       if (siswaErr) throw siswaErr
 
-      // 2. Ambil iuran untuk bulan & tahun terpilih
+      // 2. Ambil iuran untuk bulan & tahun terpilih (beserta status_aktif siswa)
       const { data: iuranData, error: iuranErr } = await supabase
         .from('iuran')
-        .select('id, siswa_id, nominal, status_bayar')
+        .select('id, siswa_id, nominal, status_bayar, siswa:siswa_id(id, nama, status_aktif)')
         .eq('bulan', bulanInt)
         .eq('tahun', tahunInt)
 
@@ -77,10 +86,23 @@ export default function AdminIuranGeneratePage() {
       // Deteksi siswa yang sudah punya iuran belum bayar, tapi nominalnya berbeda dari kelas saat ini
       const siswaMap = new Map((siswaData || []).map(s => [s.id, s]))
       const mismatched: MismatchedItem[] = []
+      const inactiveBills: InactiveBillItem[] = []
 
       for (const iur of iuranData || []) {
         if (iur.status_bayar === 'belum_bayar' || iur.status_bayar === 'ditolak') {
           const s = siswaMap.get(iur.siswa_id)
+          const rawSiswa = (iur.siswa as any)
+
+          // Cek jika siswa nonaktif tapi memiliki tagihan belum lunas
+          if (rawSiswa && rawSiswa.status_aktif === false) {
+            inactiveBills.push({
+              id: iur.id,
+              siswa_id: iur.siswa_id,
+              siswa_nama: rawSiswa.nama || 'Siswa',
+              nominal: Number(iur.nominal),
+            })
+          }
+
           if (s) {
             const currentProg = s.program_kelas as any
             const targetNominal = Number(currentProg?.biaya_bulanan || 100000)
@@ -99,6 +121,7 @@ export default function AdminIuranGeneratePage() {
       }
 
       setMismatchedList(mismatched)
+      setInactiveList(inactiveBills)
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan saat memeriksa data.')
     } finally {
@@ -136,6 +159,29 @@ export default function AdminIuranGeneratePage() {
       setError(err.message || 'Gagal menyimpan data iuran.')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const handleCleanupInactive = async () => {
+    if (inactiveList.length === 0) return
+    setCleaning(true)
+    setError(null)
+
+    try {
+      const ids = inactiveList.map(item => item.id)
+      const { error: delErr } = await supabase
+        .from('iuran')
+        .delete()
+        .in('id', ids)
+
+      if (delErr) throw delErr
+
+      setSuccessMsg(`✅ Berhasil membersihkan ${ids.length} tagihan siswa nonaktif!`)
+      await checkSiswaWithoutIuran()
+    } catch (err: any) {
+      setError(err.message || 'Gagal membersihkan tagihan siswa nonaktif.')
+    } finally {
+      setCleaning(false)
     }
   }
 
@@ -209,6 +255,34 @@ export default function AdminIuranGeneratePage() {
                 </p>
               )}
             </div>
+
+            {inactiveList.length > 0 && (
+              <div className="p-4 border-2 border-amber-500 rounded-2xl bg-amber-500/10 text-dark flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold font-sans text-amber-800">⚠️ Tagihan Siswa Nonaktif Terdeteksi:</span>
+                  <Badge color="accent">{inactiveList.length} tagihan belum lunas</Badge>
+                </div>
+                <p className="text-xs text-dark/80 font-sans">
+                  Terdapat {inactiveList.length} tagihan iuran belum lunas milik siswa yang saat ini berstatus nonaktif. Tagihan ini tidak seharusnya masuk perhitungan tunggakan.
+                </p>
+                <div className="max-h-36 overflow-y-auto flex flex-col gap-1.5 text-xs bg-white/70 p-2.5 rounded-xl border border-dark/20">
+                  {inactiveList.map(item => (
+                    <div key={item.id} className="flex justify-between items-center">
+                      <span className="font-bold text-dark">{item.siswa_nama} <span className="font-normal text-dark/60">(Nonaktif)</span></span>
+                      <span className="text-dark/70 font-mono">{formatRupiah(item.nominal)}</span>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={handleCleanupInactive}
+                  disabled={cleaning || loading}
+                  className="w-full text-sm py-2.5 font-bold border-amber-600 text-amber-950 bg-amber-100 hover:bg-amber-200"
+                >
+                  {cleaning ? '⏳ Membersihkan...' : `🧹 Hapus ${inactiveList.length} Tagihan Siswa Nonaktif`}
+                </Button>
+              </div>
+            )}
 
             {mismatchedList.length > 0 && (
               <div className="p-4 border-2 border-accent rounded-2xl bg-accent/10 text-dark flex flex-col gap-3">
