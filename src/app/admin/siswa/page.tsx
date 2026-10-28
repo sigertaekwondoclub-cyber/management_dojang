@@ -119,15 +119,24 @@ export default function SiswaAdminPage() {
         .eq('id', editingId)
       error = updateError
 
-      // Update otomatis nominal tagihan iuran yang belum bayar jika program kelas diperbarui
-      if (!error && payload.program_kelas_id) {
-        const prog = programList.find(p => p.id === payload.program_kelas_id)
-        if (prog && typeof prog.biaya_bulanan === 'number') {
+      if (!error) {
+        if (!payload.status_aktif) {
+          // Jika siswa dinonaktifkan: batalkan/hapus tagihan iuran yang belum bayar
           await supabase
             .from('iuran')
-            .update({ nominal: prog.biaya_bulanan })
+            .delete()
             .eq('siswa_id', editingId)
             .in('status_bayar', ['belum_bayar', 'ditolak'])
+        } else if (payload.program_kelas_id) {
+          // Jika siswa aktif dan program kelas diperbarui: sesuaikan tarif tagihan belum bayar
+          const prog = programList.find(p => p.id === payload.program_kelas_id)
+          if (prog && typeof prog.biaya_bulanan === 'number') {
+            await supabase
+              .from('iuran')
+              .update({ nominal: prog.biaya_bulanan })
+              .eq('siswa_id', editingId)
+              .in('status_bayar', ['belum_bayar', 'ditolak'])
+          }
         }
       }
     } else {
@@ -140,7 +149,13 @@ export default function SiswaAdminPage() {
     if (error) {
       setFormError('Gagal menyimpan data: ' + error.message)
     } else {
-      setFormSuccess(editingId ? 'Data siswa berhasil diperbarui!' : 'Siswa baru berhasil ditambahkan!')
+      let successText = editingId ? 'Data siswa berhasil diperbarui!' : 'Siswa baru berhasil ditambahkan!'
+      if (editingId && !payload.status_aktif) {
+        successText = 'Data siswa diperbarui (Status: Nonaktif). Tagihan bulanan belum bayar otomatis dibatalkan.'
+      } else if (editingId && payload.status_aktif) {
+        successText = 'Data siswa diperbarui (Status: Aktif). Tagihan bulanan dan kelas telah disinkronkan.'
+      }
+      setFormSuccess(successText)
       await fetchData()
       setTimeout(() => {
         setIsFormOpen(false)
