@@ -75,6 +75,12 @@ export default function AdminEventPage() {
   const [pesertaMsg, setPesertaMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [copyToast, setCopyToast] = useState(false)
 
+  // Hasil / Medali Modal State
+  const [evalPeserta, setEvalPeserta] = useState<PesertaWithSiswa | null>(null)
+  const [formHasil, setFormHasil] = useState('')
+  const [formCatatan, setFormCatatan] = useState('')
+  const [savingHasil, setSavingHasil] = useState(false)
+
   // 1. Fetch Events, Peserta Count, & Siswa Aktif
   const fetchEvents = useCallback(async () => {
     setLoading(true)
@@ -208,6 +214,42 @@ export default function AdminEventPage() {
       }))
     } catch (err: any) {
       setPesertaMsg({ text: '⚠️ Gagal menghapus peserta: ' + err.message, type: 'error' })
+    }
+  }
+
+  // 4b. Input / Edit Hasil Prestasi Atlet
+  const openHasilModal = (peserta: PesertaWithSiswa) => {
+    setEvalPeserta(peserta)
+    setFormHasil(peserta.hasil || '')
+    setFormCatatan(peserta.catatan || '')
+  }
+
+  const handleSaveHasil = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!evalPeserta || !kelolaEvent) return
+    setSavingHasil(true)
+
+    try {
+      const { error } = await supabase
+        .from('event_peserta')
+        .update({
+          hasil: formHasil.trim() || null,
+          catatan: formCatatan.trim() || null
+        })
+        .eq('id', evalPeserta.id)
+
+      if (error) throw error
+
+      setPesertaMsg({ 
+        text: `✅ Prestasi untuk ${evalPeserta.siswa?.nama || 'atlet'} berhasil diperbarui!`, 
+        type: 'success' 
+      })
+      setEvalPeserta(null)
+      await fetchPesertaModal(kelolaEvent.id)
+    } catch (err: any) {
+      alert('Gagal menyimpan hasil: ' + err.message)
+    } finally {
+      setSavingHasil(false)
     }
   }
 
@@ -723,6 +765,7 @@ export default function AdminEventPage() {
                           <th className="p-3">Nama Atlet</th>
                           <th className="p-3">Sabuk & Kelas</th>
                           <th className="p-3">No HP Ortu</th>
+                          <th className="p-3">Pencapaian / Medali</th>
                           <th className="p-3 text-center">Status</th>
                           <th className="p-3 text-right">Aksi</th>
                         </tr>
@@ -739,19 +782,46 @@ export default function AdminEventPage() {
                               )}
                             </td>
                             <td className="p-3 text-dark/70 font-mono">{p.siswa?.no_hp_ortu || '-'}</td>
+                            <td className="p-3">
+                              {p.hasil ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-block px-2 py-0.5 rounded font-bold text-[10px] bg-secondary border border-dark text-dark w-max">
+                                    🏅 {p.hasil}
+                                  </span>
+                                  {p.catatan && (
+                                    <span className="text-[10px] text-dark/60 italic truncate max-w-[150px]" title={p.catatan}>
+                                      {p.catatan}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-dark/40 italic text-[11px]">-</span>
+                              )}
+                            </td>
                             <td className="p-3 text-center">
                               <Badge color={p.status_daftar === 'terdaftar' ? 'primary' : 'accent'}>
                                 {p.status_daftar}
                               </Badge>
                             </td>
                             <td className="p-3 text-right">
-                              <button
-                                onClick={() => handleDeletePeserta(p.id, p.siswa?.nama || 'Siswa')}
-                                className="text-accent hover:text-red-700 font-bold px-2 py-1 rounded hover:bg-accent/10 transition-colors"
-                                title="Hapus dari event"
-                              >
-                                🗑️ Hapus
-                              </button>
+                              <div className="flex gap-1.5 justify-end items-center">
+                                <button
+                                  type="button"
+                                  onClick={() => openHasilModal(p)}
+                                  className="text-dark bg-secondary/60 hover:bg-secondary font-bold px-2 py-1 rounded border border-dark transition-colors text-[10px] flex items-center gap-1"
+                                  title="Input / Ubah Hasil Medali"
+                                >
+                                  🏅 {p.hasil ? 'Ubah' : 'Input Hasil'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePeserta(p.id, p.siswa?.nama || 'Siswa')}
+                                  className="text-accent hover:text-red-700 font-bold px-2 py-1 rounded hover:bg-accent/10 transition-colors text-[10px]"
+                                  title="Hapus dari event"
+                                >
+                                  🗑️ Hapus
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -768,6 +838,69 @@ export default function AdminEventPage() {
                 Tutup
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL INPUT HASIL PRESTASI */}
+      {evalPeserta && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white border-4 border-dark rounded-3xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 flex flex-col gap-4">
+            <div className="flex justify-between items-center border-b-2 border-dark/10 pb-3">
+              <div>
+                <span className="text-xs uppercase font-bold text-primary font-sans">Prestasi Atlet</span>
+                <h3 className="text-lg font-bold font-sans text-dark">{evalPeserta.siswa?.nama || 'Atlet'}</h3>
+              </div>
+              <button 
+                onClick={() => setEvalPeserta(null)}
+                className="w-7 h-7 rounded-full bg-dark/10 hover:bg-dark/20 text-dark font-bold flex items-center justify-center text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveHasil} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-dark font-sans">Pencapaian / Medali</label>
+                <div className="flex flex-wrap gap-1.5 mb-1">
+                  {['Juara 1 (Emas)', 'Juara 2 (Perak)', 'Juara 3 (Perunggu)', 'Peserta'].map(pPreset => (
+                    <button
+                      key={pPreset}
+                      type="button"
+                      onClick={() => setFormHasil(pPreset)}
+                      className="text-[10px] font-bold px-2 py-1 rounded-lg border border-dark bg-background hover:bg-secondary/40 text-dark transition-colors"
+                    >
+                      {pPreset}
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  value={formHasil}
+                  onChange={e => setFormHasil(e.target.value)}
+                  placeholder="Contoh: Juara 1 Emas Poomsae Cadet Putra"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-dark font-sans">Catatan / Evaluasi (Opsional)</label>
+                <textarea
+                  value={formCatatan}
+                  onChange={e => setFormCatatan(e.target.value)}
+                  placeholder="Contoh: Teknik tendangan sangat konsisten, tingkatkan stamina ronde 3."
+                  className="border-2 border-dark rounded-xl p-3 text-xs font-sans text-dark bg-white focus:outline-none focus:ring-2 focus:ring-primary h-20 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-dark/10">
+                <Button type="button" variant="secondary" onClick={() => setEvalPeserta(null)}>
+                  Batal
+                </Button>
+                <Button type="submit" variant="primary" disabled={savingHasil}>
+                  {savingHasil ? 'Menyimpan...' : '💾 Simpan Hasil'}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
