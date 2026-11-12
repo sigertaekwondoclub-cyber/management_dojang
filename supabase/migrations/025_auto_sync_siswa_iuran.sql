@@ -24,8 +24,9 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- Skenario B: Siswa diaktifkan kembali (status_aktif: false -> true)
-    IF (TG_OP = 'UPDATE' AND OLD.status_aktif = false AND NEW.status_aktif = true) THEN
+    -- Skenario B: Siswa diaktifkan kembali atau siswa baru didaftarkan aktif
+    IF (TG_OP = 'UPDATE' AND OLD.status_aktif = false AND NEW.status_aktif = true) OR
+       (TG_OP = 'INSERT' AND NEW.status_aktif = true) THEN
         -- Cek apakah sudah ada tagihan di bulan berjalan
         SELECT EXISTS (
             SELECT 1 FROM public.iuran

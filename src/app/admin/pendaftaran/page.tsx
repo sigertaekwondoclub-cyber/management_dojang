@@ -57,7 +57,7 @@ export default function PendaftaranAdminPage() {
   const handleTerima = async (item: PendaftaranSiswa) => {
     setActionLoading(true)
     try {
-      const { error: insertError } = await supabase.from('siswa').insert([{
+      const { data: newSiswa, error: insertError } = await supabase.from('siswa').insert([{
         nama: item.nama_calon_siswa,
         tgl_lahir: item.tgl_lahir,
         tempat_lahir: item.tempat_lahir || null,
@@ -69,8 +69,32 @@ export default function PendaftaranAdminPage() {
         alamat: item.alamat || null,
         tgl_gabung: new Date().toISOString().split('T')[0],
         status_aktif: true,
-      }])
+      }]).select().single()
+
       if (insertError) throw insertError
+
+      // Buatkan tagihan iuran bulan berjalan jika memiliki program kelas
+      if (newSiswa && item.program_kelas_id) {
+        const now = new Date()
+        const currMonth = now.getMonth() + 1
+        const currYear = now.getFullYear()
+
+        const { data: prog } = await supabase
+          .from('program_kelas')
+          .select('biaya_bulanan')
+          .eq('id', item.program_kelas_id)
+          .single()
+
+        const nominal = prog?.biaya_bulanan || 100000
+
+        await supabase.from('iuran').insert({
+          siswa_id: newSiswa.id,
+          bulan: currMonth,
+          tahun: currYear,
+          nominal: nominal,
+          status_bayar: 'belum_bayar'
+        })
+      }
 
       const { error: updateError } = await supabase
         .from('pendaftaran_siswa')

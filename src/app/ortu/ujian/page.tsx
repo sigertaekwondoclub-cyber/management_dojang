@@ -23,7 +23,7 @@ export default function OrtuUjianPage() {
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
-  const [targetSesi, setTargetSesi] = useState(12)
+  const targetSesi = 12
   const [sesiHadir, setSesiHadir] = useState(0)
 
   const fetchRiwayat = useCallback(async () => {

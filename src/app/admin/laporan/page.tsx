@@ -348,10 +348,38 @@ export default function AdminLaporanPage() {
   // 6. Fetch Prestasi
   const fetchPrestasi = useCallback(async () => {
     const { data } = await supabase
-      .from('prestasi')
-      .select('*, siswa:siswa_id(nama)')
-      .order('tgl_event', { ascending: false })
-    setPrestasiData(data || [])
+      .from('event_peserta')
+      .select('*, siswa:siswa_id(nama, sabuk_saat_ini), event_kompetisi:event_id(nama, tgl, lokasi)')
+      .not('hasil', 'is', null)
+      .order('created_at', { ascending: false })
+
+    const formatted = (data || [])
+      .filter((p: any) => p.hasil && p.hasil.trim() !== '')
+      .map((p: any) => {
+        const hasilLower = (p.hasil || '').toLowerCase()
+        let medali: 'emas' | 'perak' | 'perunggu' | null = null
+        if (hasilLower.includes('emas') || hasilLower.includes('juara 1') || hasilLower.includes('gold')) {
+          medali = 'emas'
+        } else if (hasilLower.includes('perak') || hasilLower.includes('juara 2') || hasilLower.includes('silver')) {
+          medali = 'perak'
+        } else if (hasilLower.includes('perunggu') || hasilLower.includes('juara 3') || hasilLower.includes('bronze')) {
+          medali = 'perunggu'
+        }
+
+        return {
+          id: p.id,
+          siswa: p.siswa,
+          nama_event: p.event_kompetisi?.nama || 'Event Kompetisi',
+          tgl_event: p.event_kompetisi?.tgl || p.created_at,
+          lokasi: p.event_kompetisi?.lokasi || '-',
+          peringkat: p.hasil,
+          medali,
+          catatan: p.catatan,
+          hasil: p.hasil
+        }
+      })
+
+    setPrestasiData(formatted)
   }, [])
 
   const fetchAll = useCallback(async () => {
@@ -536,8 +564,8 @@ export default function AdminLaporanPage() {
     } else if (activeTab === 'prestasi') {
       downloadCSV(`prestasi-${filterTahun}.csv`,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        prestasiData.map((p: any) => [(p.siswa as any)?.nama || '', p.nama_event, p.kategori || '', p.peringkat || '', p.medali || '-', p.tgl_event]),
-        ['Nama Siswa', 'Nama Event', 'Kategori', 'Peringkat', 'Medali', 'Tanggal']
+        prestasiData.map((p: any) => [(p.siswa as any)?.nama || '', p.nama_event, p.lokasi || '-', p.hasil || p.peringkat || '', p.medali || '-', p.tgl_event ? new Date(p.tgl_event).toLocaleDateString('id-ID') : '']),
+        ['Nama Siswa', 'Nama Event', 'Lokasi', 'Pencapaian/Hasil', 'Medali', 'Tanggal']
       )
     } else if (activeTab === 'honor') {
       const run = honorData[0]

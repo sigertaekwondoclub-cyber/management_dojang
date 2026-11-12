@@ -165,6 +165,21 @@ export async function generatePayroll(bulan: number, tahun: number) {
       .maybeSingle()
 
     if (existingRun) {
+      // Proteksi integritas data: jangan hapus jika ada honor yang sudah dibayarkan / kasbon terpotong
+      const { data: paidDetails } = await supabaseAdmin
+        .from('payroll_details')
+        .select('id, pelatih:pelatih_id(nama)')
+        .eq('payroll_run_id', existingRun.id)
+        .eq('status_dibayar', true)
+
+      if (paidDetails && paidDetails.length > 0) {
+        const names = paidDetails.map((p: any) => p.pelatih?.nama || 'Pelatih').join(', ')
+        return {
+          success: false,
+          message: `Tidak dapat menghitung ulang payroll! Ada honor pelatih yang sudah ditandai lunas/dibayar (${names}). Batalkan status bayar terlebih dahulu sebelum menghitung ulang periode ini.`
+        }
+      }
+
       await supabaseAdmin.from('payroll_runs').delete().eq('id', existingRun.id)
     }
 

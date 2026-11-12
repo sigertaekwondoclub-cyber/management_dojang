@@ -26,7 +26,7 @@ export interface FinancialSummaryInfo {
   iuranTransfer?: number
 }
 
-function formatRupiahNum(n: number): string {
+export function formatRupiahNum(n: number): string {
   return 'Rp ' + Number(n || 0).toLocaleString('id-ID')
 }
 

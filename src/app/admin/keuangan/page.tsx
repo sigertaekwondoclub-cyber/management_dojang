@@ -261,13 +261,15 @@ export default function AdminKeuanganPage() {
     })
     setMerchantLunas(merchantMapped)
 
-    // 5. Piutang Iuran (belum bayar)
+    // 5. Piutang Iuran (belum bayar) - Hanya sertakan tagihan siswa berstatus aktif
     const { data: unpaidIuranData } = await supabase
       .from('iuran')
-      .select('id, bulan, tahun, nominal, siswa:siswa_id(nama)')
+      .select('id, bulan, tahun, nominal, siswa:siswa_id(nama, status_aktif)')
       .eq('tahun', tahun)
       .eq('status_bayar', 'belum_bayar')
-    setUnpaidIuran(unpaidIuranData || [])
+
+    const filteredUnpaid = (unpaidIuranData || []).filter((u: any) => u.siswa?.status_aktif !== false)
+    setUnpaidIuran(filteredUnpaid)
 
     // 6. Kasbon Pelatih aktif (sisa_hutang > 0)
     const { data: activeKasbonData } = await supabase

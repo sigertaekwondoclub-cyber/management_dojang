@@ -67,9 +67,15 @@ export default function OrtuKartuPage() {
     }
 
     setLoading(false)
-  }, [supabase])
+  }, [activeChild, childLoading, supabase])
 
-  useEffect(() => { fetchKartu() }, [fetchKartu])
+  useEffect(() => {
+    if (activeChild) {
+      fetchKartu()
+    } else if (!childLoading) {
+      setLoading(false)
+    }
+  }, [fetchKartu, activeChild, childLoading])
 
   if (loading) {
     return (

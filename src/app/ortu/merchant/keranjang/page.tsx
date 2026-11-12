@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useKeranjang } from '@/context/KeranjangContext'
 import { useOrtuChild } from '@/context/OrtuChildContext'
+import { checkoutMerchantAction } from '@/app/ortu/merchant/actions'
 
 const supabase = createClient()
 function formatRupiah(n: number) {
@@ -65,31 +66,27 @@ export default function KeranjangPage() {
     setCheckingOut(true)
     setError(null)
 
-    const { data: pesanan, error: err } = await supabase.from('pesanan_merchant')
-      .insert({ siswa_id: targetSiswaId, total_harga: totalHarga, status: 'menunggu_pembayaran' })
-      .select().single()
-
-    if (err || !pesanan) {
-      setError('Gagal membuat pesanan: ' + (err?.message || ''))
-      setCheckingOut(false)
-      return
-    }
-
     try {
-      for (const item of items) {
-        await supabase.from('pesanan_item').insert({
-          pesanan_id: pesanan.id,
-          produk_id: item.produk.id,
-          varian_id: item.varian.id,
+      const res = await checkoutMerchantAction({
+        siswaId: targetSiswaId,
+        totalHarga,
+        items: items.map(item => ({
+          produkId: item.produk.id,
+          varianId: item.varian.id,
           qty: item.qty,
-          harga_satuan: item.produk.harga
-        })
-        await supabase.from('produk_varian').update({ stok: Math.max(0, item.varian.stok - item.qty) }).eq('id', item.varian.id)
+          hargaSatuan: item.produk.harga,
+        }))
+      })
+
+      if (!res.success || !res.pesananId) {
+        setError(res.message || 'Gagal melakukan checkout pesanan.')
+        setCheckingOut(false)
+        return
       }
 
       setPesananTotal(totalHarga)
       clearKeranjang()
-      setPesananId(pesanan.id)
+      setPesananId(res.pesananId)
     } catch (e: any) {
       setError(e.message || 'Gagal checkout.')
     } finally {

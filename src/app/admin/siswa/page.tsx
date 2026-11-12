@@ -140,10 +140,26 @@ export default function SiswaAdminPage() {
         }
       }
     } else {
-      const { error: insertError } = await supabase
+      const { data: newSiswa, error: insertError } = await supabase
         .from('siswa')
         .insert([payload])
+        .select()
+        .single()
       error = insertError
+
+      if (!error && newSiswa && payload.status_aktif && payload.program_kelas_id) {
+        const now = new Date()
+        const prog = programList.find(p => p.id === payload.program_kelas_id)
+        const nominal = prog?.biaya_bulanan || 100000
+
+        await supabase.from('iuran').insert({
+          siswa_id: newSiswa.id,
+          bulan: now.getMonth() + 1,
+          tahun: now.getFullYear(),
+          nominal: nominal,
+          status_bayar: 'belum_bayar'
+        })
+      }
     }
 
     if (error) {
