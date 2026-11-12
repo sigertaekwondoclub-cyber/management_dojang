@@ -135,6 +135,12 @@ export default function Home() {
         backgroundSize: '24px 24px, 120px 120px, 120px 120px',
       }} />
 
+      {/* Atmospheric Background Banner */}
+      <div 
+        className="fixed inset-0 z-0 pointer-events-none opacity-[0.035] bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/bg-app.png')" }}
+      />
+
       {/* Blur blobs */}
       <div className="absolute top-[10%] left-[-5%] w-80 h-80 bg-primary/8 rounded-full blur-[80px] pointer-events-none z-0" />
       <div className="absolute bottom-[20%] right-[-5%] w-[450px] h-[450px] bg-secondary/8 rounded-full blur-[110px] pointer-events-none z-0" />
@@ -142,8 +148,8 @@ export default function Home() {
       {/* === STICKY NAVIGATION === */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-[#FDF6EC] border-b-[4px] border-dark px-4 sm:px-8 py-3 flex items-center justify-between shadow-[0_4px_0px_#1E2A38]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden">
-            <img src="/logo-siger.png" alt="Logo Siger TC" className="w-full h-full object-cover" />
+          <div className="w-10 h-10 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden p-0.5">
+            <img src="/logo-siger.png" alt="Logo Siger TC" className="w-full h-full object-contain" />
           </div>
           <span className="font-pixel text-base tracking-wider hidden sm:block">SIGER TC</span>
         </div>
@@ -198,8 +204,8 @@ export default function Home() {
 
       {/* === HERO === */}
       <section id="hero" className="z-10 px-6 sm:px-16 pt-8 pb-16 flex flex-col items-center text-center gap-8 max-w-4xl mx-auto">
-        <div className="w-24 h-24 md:w-32 md:h-32 bg-white border-[4px] border-dark shadow-[6px_6px_0px_#1E2A38] flex items-center justify-center overflow-hidden animate-bounce-in">
-          <img src="/logo-siger.png" alt="Logo Siger Taekwondo Club" className="w-full h-full object-cover" />
+        <div className="w-24 h-24 md:w-32 md:h-32 bg-white border-[4px] border-dark shadow-[6px_6px_0px_#1E2A38] flex items-center justify-center overflow-hidden animate-bounce-in p-1">
+          <img src="/logo-siger.png" alt="Logo Siger Taekwondo Club" className="w-full h-full object-contain" />
         </div>
 
         <h1 className="text-3xl sm:text-5xl md:text-6xl font-pixel tracking-wide text-dark leading-tight animate-fade-in-up">
@@ -220,6 +226,15 @@ export default function Home() {
               ✦ BERGABUNG SEKARANG
             </Button>
           </Link>
+        </div>
+
+        {/* === OFFICIAL CLUB BANNER === */}
+        <div className="w-full mt-4 rounded-2xl md:rounded-3xl border-4 border-dark shadow-brutal overflow-hidden bg-dark animate-fade-in-up">
+          <img 
+            src="/bg-app.png" 
+            alt="Siger Taekwondo Club Official Banner" 
+            className="w-full h-auto object-cover hover:scale-[1.01] transition-transform duration-300"
+          />
         </div>
       </section>
 
@@ -482,8 +497,8 @@ export default function Home() {
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-3 text-center md:text-left">
             <div className="flex items-center gap-3 justify-center md:justify-start">
-              <div className="w-8 h-8 bg-white border-2 border-white overflow-hidden flex items-center justify-center">
-                <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-cover" />
+              <div className="w-8 h-8 bg-white border-2 border-white overflow-hidden flex items-center justify-center p-0.5">
+                <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-contain" />
               </div>
               <span className="font-pixel text-base tracking-wider text-white">SIGER TAEKWONDO CLUB</span>
             </div>

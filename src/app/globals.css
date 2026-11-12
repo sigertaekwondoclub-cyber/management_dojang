@@ -13,6 +13,20 @@
     min-height: 100vh;
   }
   
+  /* Ambient App Background Wallpaper */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url('/bg-app.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    opacity: 0.035;
+    pointer-events: none;
+    z-index: 0;
+  }
+
   /* Membuat logo berada di dalam lingkaran putih bersih dengan shadow brutal */
   body::after {
     content: "";
@@ -27,10 +41,10 @@
     background-image: url('/logo-siger.png');
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 80% auto;
+    background-size: 85% auto;
     border: 4px solid #1E2A38;
     box-shadow: 6px 6px 0px rgba(30, 42, 56, 0.15);
-    z-index: -1;
+    z-index: 0;
     opacity: 0.04; /* Membuat watermark samar transparan */
     pointer-events: none;
     transition: opacity 0.3s ease;

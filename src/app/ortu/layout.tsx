@@ -127,8 +127,8 @@ function OrtuLayoutInner({ children }: { children: React.ReactNode }) {
         {/* MOBILE HEADER */}
         <header className="md:hidden flex items-center justify-between bg-white border-b-[3px] border-dark px-4 py-2.5 sticky top-0 z-30">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="w-8 h-8 bg-white border-[2px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
-              <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
+            <div className="w-8 h-8 bg-white border-[2px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+              <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="text-xs font-pixel text-dark leading-tight">Portal Ortu</h2>
@@ -144,8 +144,8 @@ function OrtuLayoutInner({ children }: { children: React.ReactNode }) {
         <aside className="w-64 bg-white border-r-[4px] border-dark p-6 hidden md:flex flex-col justify-between shrink-0 h-screen sticky top-0">
           <div className="overflow-y-auto pr-1">
             <div className="flex items-center gap-3 mb-6 border-b-[3px] border-dark pb-4">
-              <div className="w-12 h-12 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
-                <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-cover" />
+              <div className="w-12 h-12 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+                <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-contain" />
               </div>
               <div className="min-w-0">
                 <h2 className="text-sm font-pixel text-dark leading-tight truncate">Portal Ortu</h2>

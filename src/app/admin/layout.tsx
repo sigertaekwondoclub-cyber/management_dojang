@@ -78,8 +78,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* MOBILE HEADER */}
       <header className="md:hidden flex items-center justify-between bg-white border-b-[3px] border-dark px-6 py-3 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
-            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
+          <div className="w-9 h-9 bg-white border-[3px] border-dark shadow-[2px_2px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-base font-pixel text-dark leading-tight">Admin Panel</h2>
         </div>
@@ -88,8 +88,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex w-64 bg-white border-r-[4px] border-dark p-5 flex-col">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b-[3px] border-dark">
-          <div className="w-11 h-11 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0">
-            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-cover" />
+          <div className="w-11 h-11 bg-white border-[3px] border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden shrink-0 p-0.5">
+            <img src="/logo-siger.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-base font-pixel text-dark leading-tight">Admin Panel</h2>
         </div>

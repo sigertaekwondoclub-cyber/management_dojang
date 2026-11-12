@@ -129,14 +129,23 @@ export default function PendaftaranPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center py-12 px-4 sm:px-6 lg:px-8 bg-background">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-10">
+    <main className="flex min-h-screen flex-col items-center py-12 px-4 sm:px-6 lg:px-8 bg-background relative overflow-hidden">
+      {/* Ambient Background Wallpaper */}
+      <div 
+        className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-[0.035] pointer-events-none"
+        style={{ backgroundImage: "url('/bg-app.png')" }}
+      />
+
+      <div className="w-full max-w-2xl relative z-10">
+        <div className="text-center mb-10 flex flex-col items-center">
           <Link href="/">
-            <Badge color="secondary" className="mb-6 hover:opacity-80 cursor-pointer">← Kembali</Badge>
+            <Badge color="secondary" className="mb-4 hover:opacity-80 cursor-pointer">← Kembali</Badge>
           </Link>
-          <h1 className="text-4xl font-bold font-sans text-dark">Pendaftaran Siswa Baru</h1>
-          <p className="text-dark/80 mt-2 font-sans">Siger Taekwondo Club</p>
+          <div className="w-16 h-16 rounded-full bg-white border-2 border-dark shadow-[3px_3px_0px_#1E2A38] flex items-center justify-center overflow-hidden mb-3 p-1">
+            <img src="/logo-siger.png" alt="Logo Siger" className="w-full h-full object-contain" />
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold font-sans text-dark">Pendaftaran Siswa Baru</h1>
+          <p className="text-dark/80 mt-1 font-sans">Siger Taekwondo Club</p>
         </div>
 
         <Card className="p-6 md:p-8">

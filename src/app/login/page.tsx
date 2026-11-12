@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -63,16 +64,30 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-background">
-      <Card className="w-full max-w-md p-8 flex flex-col gap-6 items-center animate-scale-in">
+    <main className="flex min-h-screen flex-col items-center justify-center p-6 relative overflow-hidden bg-[#12151B]">
+      {/* Background App Wallpaper */}
+      <div 
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-35 filter blur-[0.5px]"
+        style={{ backgroundImage: "url('/bg-app.png')" }}
+      />
+      <div className="absolute inset-0 z-0 bg-gradient-to-t from-[#12151B] via-[#12151B]/60 to-[#12151B]/80 pointer-events-none" />
+
+      {/* Subtle scanline overlay */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.04]" style={{
+        backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.2) 2px, rgba(255,255,255,0.2) 4px)',
+      }} />
+
+      <Card className="w-full max-w-md p-8 flex flex-col gap-6 items-center animate-scale-in relative z-10 bg-[#FDF6EC] border-4 border-dark shadow-[8px_8px_0px_#1E2A38]">
         <div className="text-center flex flex-col items-center gap-4">
-          <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden animate-bounce-in">
-            <img 
-              src="/logo-siger.png" 
-              alt="Logo Siger Taekwondo Club" 
-              className="w-full h-full object-cover" 
-            />
-          </div>
+          <Link href="/" title="Kembali ke Beranda" className="hover:scale-105 transition-transform duration-150">
+            <div className="w-24 h-24 rounded-full bg-white border-4 border-dark shadow-brutal flex items-center justify-center overflow-hidden animate-bounce-in p-1">
+              <img 
+                src="/logo-siger.png" 
+                alt="Logo Siger Taekwondo Club" 
+                className="w-full h-full object-contain" 
+              />
+            </div>
+          </Link>
           <div className="animate-fade-in-up stagger-2">
             <h1 className="text-3xl font-bold font-sans text-dark">Siger TKD Manager</h1>
             <p className="text-dark/80 mt-2 font-sans">Masuk ke akun Anda</p>
