@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useKeranjang } from '@/context/KeranjangContext'
 import { useOrtuChild } from '@/context/OrtuChildContext'
-import { checkoutMerchantAction } from '@/app/ortu/merchant/actions'
+import { checkoutMerchantAction, uploadBuktiTransferMerchantAction } from '@/app/ortu/merchant/actions'
 
 const supabase = createClient()
 function formatRupiah(n: number) {
@@ -16,7 +16,7 @@ function formatRupiah(n: number) {
 }
 
 export default function KeranjangPage() {
-  const { activeChild } = useOrtuChild()
+  const { activeChild, childrenList, setActiveChildId } = useOrtuChild()
   const { items, hapusItem, updateQty, clearKeranjang, totalHarga } = useKeranjang()
   const [siswaId, setSiswaId] = useState<string | null>(null)
   const [checkingOut, setCheckingOut] = useState(false)
@@ -28,8 +28,8 @@ export default function KeranjangPage() {
   
   // State Rekening
   const [bankInfo, setBankInfo] = useState({
-    bank: 'BCA',
-    nomor: '1234567890',
+    bank: 'GoPay',
+    nomor: '082176721334',
     atasNama: 'Siger Taekwondo Club'
   })
 
@@ -50,9 +50,8 @@ export default function KeranjangPage() {
     supabase.from('pengaturan_club').select('*').limit(1).single()
       .then(({ data }) => {
         if (data) {
-          // Gunakan rekening merchant jika diisi, jika tidak gunakan rekening utama iuran
-          const bank = data.merchant_bank || data.rekening_bank || 'BCA'
-          const nomor = data.merchant_nomor || data.rekening_nomor || '1234567890'
+          const bank = data.merchant_bank || data.rekening_bank || 'GoPay'
+          const nomor = data.merchant_nomor || data.rekening_nomor || '082176721334'
           const atasNama = data.merchant_atas_nama || data.rekening_atas_nama || 'Siger Taekwondo Club'
           setBankInfo({ bank, nomor, atasNama })
         }
@@ -99,16 +98,17 @@ export default function KeranjangPage() {
     setUploadingBukti(true)
     setError(null)
 
-    const ext = buktiFile.name.split('.').pop()
-    const { data: up, error: upErr } = await supabase.storage.from('merchant').upload(`bukti/${pesananId}.${ext}`, buktiFile, { upsert: true })
-    if (upErr) {
-      setError('Gagal upload: ' + upErr.message)
+    const fd = new FormData()
+    fd.append('pesananId', pesananId)
+    fd.append('file', buktiFile)
+
+    const res = await uploadBuktiTransferMerchantAction(fd)
+    if (!res.success) {
+      setError(res.message || 'Gagal mengupload bukti transfer.')
       setUploadingBukti(false)
       return
     }
 
-    const url = supabase.storage.from('merchant').getPublicUrl(up.path).data.publicUrl
-    await supabase.from('pesanan_merchant').update({ bukti_transfer_url: url, status: 'menunggu_verifikasi' }).eq('id', pesananId)
     setUploadingBukti(false)
     router.push('/ortu/merchant/pesanan')
   }
@@ -131,7 +131,12 @@ export default function KeranjangPage() {
           {error && <div className="text-red-600 text-sm mb-3 font-bold">{error}</div>}
           <div className="mb-4">
             <label className="block font-bold text-dark text-sm mb-2 text-left">Upload Bukti Transfer</label>
-            <input type="file" accept="image/*" className="w-full border-2 border-dark rounded-xl px-4 py-2.5" onChange={e => setBuktiFile(e.target.files?.[0] || null)} />
+            <input
+              type="file"
+              accept="image/*"
+              className="w-full border-2 border-dark rounded-xl px-4 py-2.5 bg-white text-dark text-sm"
+              onChange={e => setBuktiFile(e.target.files?.[0] || null)}
+            />
           </div>
           <Button variant="primary" onClick={handleUploadBukti} disabled={!buktiFile || uploadingBukti} className="w-full mb-3">
             {uploadingBukti ? 'Mengupload...' : '📤 Upload Bukti Transfer'}
@@ -156,41 +161,98 @@ export default function KeranjangPage() {
       {items.length === 0 ? (
         <Card className="text-center py-12">
           <p className="text-4xl mb-4">🛒</p>
-          <p className="text-dark/50 text-lg mb-4">Keranjang kosong</p>
+          <p className="text-dark/50 text-lg mb-4">Keranjang belanja kosong</p>
           <Link href="/ortu/merchant">
             <Button variant="primary">Belanja Sekarang</Button>
           </Link>
         </Card>
       ) : (
         <>
+          {/* Identitas Siswa Pemesan */}
+          {childrenList.length > 1 ? (
+            <div className="bg-primary/10 border-2 border-dark rounded-xl p-3 mb-4">
+              <label className="block text-xs font-bold text-dark mb-1">Pesanan untuk Siswa:</label>
+              <select
+                value={activeChild?.id || ''}
+                onChange={e => setActiveChildId(e.target.value)}
+                className="w-full bg-white border-2 border-dark rounded-lg px-2.5 py-1.5 text-xs font-bold text-dark"
+              >
+                {childrenList.map(c => (
+                  <option key={c.id} value={c.id}>🥋 {c.nama} ({c.sabuk_saat_ini})</option>
+                ))}
+              </select>
+            </div>
+          ) : activeChild ? (
+            <div className="bg-primary/10 border-2 border-dark rounded-xl p-2.5 mb-4 flex items-center justify-between text-xs font-bold text-dark">
+              <span>Pesanan untuk Siswa:</span>
+              <span className="bg-white px-2 py-0.5 rounded border border-dark">🥋 {activeChild.nama}</span>
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-3 mb-6">
             {items.map(item => (
               <Card key={item.varian.id} className="flex gap-3 items-center p-3">
                 <div className="w-14 h-14 rounded-xl border-2 border-dark overflow-hidden shrink-0 bg-background">
-                  {item.produk.foto_url ? <img src={item.produk.foto_url} alt="" className="w-full h-full object-cover" /> : <span className="flex h-full items-center justify-center text-2xl">🛍️</span>}
+                  {item.produk.foto_url ? (
+                    <img src={item.produk.foto_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="flex h-full items-center justify-center text-2xl">🛍️</span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-bold text-dark text-sm">{item.produk.nama}</p>
-                  <p className="text-dark/60 text-xs">Ukuran: {item.varian.ukuran}</p>
+                  <p className="font-bold text-dark text-sm truncate">{item.produk.nama}</p>
+                  <p className="text-dark/60 text-xs">
+                    Ukuran: {item.varian.ukuran} · <span className="text-dark/40">Tersedia: {item.varian.stok}</span>
+                  </p>
                   <p className="text-primary font-bold text-sm">{formatRupiah(item.produk.harga * item.qty)}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => updateQty(item.varian.id, item.qty - 1)} className="w-7 h-7 border-2 border-dark rounded-lg font-bold">−</button>
+                  <button
+                    onClick={() => updateQty(item.varian.id, item.qty - 1)}
+                    className="w-7 h-7 border-2 border-dark rounded-lg font-bold hover:bg-background transition-colors"
+                  >
+                    −
+                  </button>
                   <span className="w-6 text-center font-bold text-sm">{item.qty}</span>
-                  <button onClick={() => updateQty(item.varian.id, item.qty + 1)} className="w-7 h-7 border-2 border-dark rounded-lg font-bold">+</button>
-                  <button onClick={() => hapusItem(item.varian.id)} className="ml-1 text-red-500 font-bold text-lg">×</button>
+                  <button
+                    onClick={() => updateQty(item.varian.id, item.qty + 1)}
+                    disabled={item.qty >= item.varian.stok}
+                    className="w-7 h-7 border-2 border-dark rounded-lg font-bold hover:bg-background disabled:opacity-40 transition-colors"
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={() => hapusItem(item.varian.id)}
+                    className="ml-1 text-red-500 hover:text-red-700 font-bold text-lg px-1"
+                    title="Hapus dari keranjang"
+                  >
+                    ×
+                  </button>
                 </div>
               </Card>
             ))}
           </div>
+
           <Card className="p-4 mb-4">
             <div className="flex justify-between items-center font-bold text-dark text-lg">
-              <span>Total</span><span className="text-primary">{formatRupiah(totalHarga)}</span>
+              <span>Total Tagihan</span>
+              <span className="text-primary">{formatRupiah(totalHarga)}</span>
             </div>
           </Card>
-          {error && <div className="bg-red-100 border-2 border-red-400 rounded-xl p-3 mb-4 text-red-700 text-sm font-bold">{error}</div>}
-          <Button variant="primary" onClick={handleCheckout} disabled={checkingOut} className="w-full">
-            {checkingOut ? 'Memproses...' : '✅ Checkout & Buat Pesanan'}
+
+          {error && (
+            <div className="bg-red-100 border-2 border-red-400 rounded-xl p-3 mb-4 text-red-700 text-sm font-bold">
+              {error}
+            </div>
+          )}
+
+          <Button
+            variant="primary"
+            onClick={handleCheckout}
+            disabled={checkingOut || items.length === 0}
+            className="w-full"
+          >
+            {checkingOut ? 'Memproses Pesanan...' : '✅ Checkout & Buat Pesanan'}
           </Button>
         </>
       )}

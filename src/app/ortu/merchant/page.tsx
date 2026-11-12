@@ -49,19 +49,28 @@ export default function OrtuMerchantPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold font-sans text-dark">🛒 Toko Club</h1>
           <p className="text-dark/60 mt-1">Produk resmi Siger Taekwondo Club</p>
         </div>
-        <Link href="/ortu/merchant/keranjang">
-          <Button variant="primary" className="relative">
-            🛒 Keranjang
-            {totalItem > 0 && (
-              <span className="absolute -top-2 -right-2 w-5 h-5 bg-accent border-2 border-dark rounded-full text-xs font-bold flex items-center justify-center text-dark">{totalItem}</span>
-            )}
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/ortu/merchant/pesanan">
+            <Button variant="secondary" className="text-sm">
+              📦 Pesanan Saya
+            </Button>
+          </Link>
+          <Link href="/ortu/merchant/keranjang">
+            <Button variant="primary" className="relative text-sm">
+              🛒 Keranjang
+              {totalItem > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-accent border-2 border-dark rounded-full text-xs font-bold flex items-center justify-center text-dark">
+                  {totalItem}
+                </span>
+              )}
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap mb-6">
@@ -81,32 +90,109 @@ export default function OrtuMerchantPage() {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {filtered.map(p => {
             const varianList = p.produk_varian || []
-            const selVarian = varianList.find(v => v.id === selectedVarian[p.id])
-            const stokHabis = !selVarian || selVarian.stok === 0
+            const totalStok = varianList.reduce((acc, v) => acc + (v.stok || 0), 0)
+            const selVarianId = selectedVarian[p.id]
+            const selVarian = varianList.find(v => v.id === selVarianId)
             const isAdded = addedIds.includes(p.id)
+            const currentQty = qty[p.id] || 1
+
+            // Logika teks dan status tombol
+            let btnLabel = '+ Keranjang'
+            let btnVariant: 'primary' | 'secondary' | 'accent' = 'accent'
+            let btnDisabled = false
+
+            if (totalStok === 0) {
+              btnLabel = 'Stok Habis'
+              btnVariant = 'secondary'
+              btnDisabled = true
+            } else if (!selVarianId) {
+              btnLabel = 'Pilih Ukuran'
+              btnVariant = 'secondary'
+              btnDisabled = true
+            } else if (selVarian && selVarian.stok === 0) {
+              btnLabel = 'Ukuran Habis'
+              btnVariant = 'secondary'
+              btnDisabled = true
+            } else if (isAdded) {
+              btnLabel = '✓ Ditambahkan!'
+              btnVariant = 'primary'
+              btnDisabled = false
+            }
 
             return (
               <Card key={p.id} className="flex flex-col p-0 overflow-hidden">
                 <div className="w-full aspect-square bg-background border-b-2 border-dark overflow-hidden">
-                  {p.foto_url ? <img src={p.foto_url} alt={p.nama} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🛍️</div>}
+                  {p.foto_url ? (
+                    <img src={p.foto_url} alt={p.nama} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl">🛍️</div>
+                  )}
                 </div>
                 <div className="p-3 flex flex-col gap-2 flex-1">
-                  <Badge color="secondary" className="self-start text-xs">{p.kategori}</Badge>
-                  <h3 className="font-bold text-dark text-sm leading-tight">{p.nama}</h3>
-                  <p className="text-primary font-bold">{formatRupiah(p.harga)}</p>
-                  <select className="w-full border-2 border-dark rounded-lg px-2 py-1.5 text-sm font-sans text-dark bg-white"
-                    value={selectedVarian[p.id] || ''}
-                    onChange={e => setSelectedVarian(prev => ({ ...prev, [p.id]: e.target.value }))}>
-                    <option value="">Pilih ukuran</option>
-                    {varianList.map(v => <option key={v.id} value={v.id} disabled={v.stok === 0}>{v.ukuran} {v.stok === 0 ? '(Habis)' : `(${v.stok})`}</option>)}
-                  </select>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setQty(prev => ({ ...prev, [p.id]: Math.max(1, (prev[p.id] || 1) - 1) }))} className="w-7 h-7 border-2 border-dark rounded-lg font-bold text-dark hover:bg-background">−</button>
-                    <span className="font-bold text-dark w-6 text-center">{qty[p.id] || 1}</span>
-                    <button onClick={() => setQty(prev => ({ ...prev, [p.id]: Math.min(selVarian?.stok || 1, (prev[p.id] || 1) + 1) }))} className="w-7 h-7 border-2 border-dark rounded-lg font-bold text-dark hover:bg-background">+</button>
+                  <div className="flex items-center justify-between gap-1">
+                    <Badge color="secondary" className="text-xs">{p.kategori}</Badge>
+                    <span className="text-[11px] font-bold text-dark/50">
+                      {totalStok > 0 ? `Total stok: ${totalStok}` : 'Habis'}
+                    </span>
                   </div>
-                  <Button variant={isAdded ? 'primary' : stokHabis ? 'secondary' : 'accent'} onClick={() => handleTambah(p)} disabled={stokHabis || !selectedVarian[p.id]} className="w-full text-sm">
-                    {isAdded ? '✓ Ditambahkan!' : stokHabis ? 'Stok Habis' : '+ Keranjang'}
+                  <div>
+                    <h3 className="font-bold text-dark text-sm leading-tight">{p.nama}</h3>
+                    {p.deskripsi && (
+                      <p className="text-dark/60 text-xs mt-0.5 line-clamp-1" title={p.deskripsi}>
+                        {p.deskripsi}
+                      </p>
+                    )}
+                  </div>
+                  <p className="text-primary font-bold">{formatRupiah(p.harga)}</p>
+
+                  <select
+                    className="w-full border-2 border-dark rounded-lg px-2 py-1.5 text-sm font-sans text-dark bg-white focus:outline-none"
+                    value={selVarianId || ''}
+                    onChange={e => {
+                      const vId = e.target.value
+                      setSelectedVarian(prev => ({ ...prev, [p.id]: vId }))
+                      const chosen = varianList.find(v => v.id === vId)
+                      if (chosen && chosen.stok > 0) {
+                        setQty(prev => ({ ...prev, [p.id]: Math.min(prev[p.id] || 1, chosen.stok) }))
+                      }
+                    }}
+                  >
+                    <option value="">Pilih ukuran</option>
+                    {varianList.map(v => (
+                      <option key={v.id} value={v.id} disabled={v.stok === 0}>
+                        {v.ukuran} {v.stok === 0 ? '(Habis)' : `(${v.stok} tersedia)`}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center justify-between gap-2 bg-background p-1.5 rounded-lg border border-dark/20">
+                    <span className="text-xs font-bold text-dark/70">Jumlah:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setQty(prev => ({ ...prev, [p.id]: Math.max(1, (prev[p.id] || 1) - 1) }))}
+                        disabled={currentQty <= 1}
+                        className="w-7 h-7 border-2 border-dark rounded-lg font-bold text-dark bg-white hover:bg-background disabled:opacity-40 transition-colors"
+                      >
+                        −
+                      </button>
+                      <span className="font-bold text-dark w-6 text-center text-sm">{currentQty}</span>
+                      <button
+                        onClick={() => setQty(prev => ({ ...prev, [p.id]: Math.min(selVarian?.stok || 99, (prev[p.id] || 1) + 1) }))}
+                        disabled={!selVarian || selVarian.stok <= 0 || currentQty >= selVarian.stok}
+                        className="w-7 h-7 border-2 border-dark rounded-lg font-bold text-dark bg-white hover:bg-background disabled:opacity-40 transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant={btnVariant}
+                    onClick={() => handleTambah(p)}
+                    disabled={btnDisabled}
+                    className="w-full text-sm mt-auto"
+                  >
+                    {btnLabel}
                   </Button>
                 </div>
               </Card>

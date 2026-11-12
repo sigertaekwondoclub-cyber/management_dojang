@@ -21,6 +21,7 @@ export default function AdminMerchantPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [existingFoto, setExistingFoto] = useState<string | null>(null)
   const [form, setForm] = useState<ProdukForm>(EMPTY_FORM)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
@@ -40,6 +41,7 @@ export default function AdminMerchantPage() {
 
   const openTambah = () => {
     setEditId(null)
+    setExistingFoto(null)
     setForm(EMPTY_FORM)
     setFotoFile(null)
     setError(null)
@@ -48,6 +50,7 @@ export default function AdminMerchantPage() {
 
   const openEdit = (p: ProdukMerchant) => {
     setEditId(p.id)
+    setExistingFoto(p.foto_url)
     setForm({
       nama: p.nama,
       kategori: p.kategori,
@@ -63,14 +66,26 @@ export default function AdminMerchantPage() {
   const toggleAktif = async (p: ProdukMerchant) => {
     if (togglingId) return
     setTogglingId(p.id)
-    await supabase.from('produk_merchant').update({ status_aktif: !p.status_aktif }).eq('id', p.id)
-    await fetchProduk()
+    const { error } = await supabase.from('produk_merchant').update({ status_aktif: !p.status_aktif }).eq('id', p.id)
+    if (error) {
+      alert('Gagal mengubah status produk: ' + error.message)
+    } else {
+      await fetchProduk()
+    }
     setTogglingId(null)
   }
 
   const hapusProduk = async (id: string) => {
     if (!confirm('Hapus produk ini? Aksi ini tidak bisa dibatalkan.')) return
-    await supabase.from('produk_merchant').delete().eq('id', id)
+    const { error } = await supabase.from('produk_merchant').delete().eq('id', id)
+    if (error) {
+      if (error.code === '23503') {
+        alert('Produk ini tidak dapat dihapus karena sudah memiliki riwayat pesanan. Anda dapat menonaktifkan produk ini agar tidak muncul di katalog toko.')
+      } else {
+        alert('Gagal menghapus produk: ' + error.message)
+      }
+      return
+    }
     fetchProduk()
   }
 
@@ -89,7 +104,7 @@ export default function AdminMerchantPage() {
     let foto_url: string | null = null
 
     if (fotoFile) {
-      const ext = fotoFile.name.split('.').pop()
+      const ext = (fotoFile.name.split('.').pop() || 'jpg').toLowerCase()
       const filename = `produk/${Date.now()}.${ext}`
       const { data: uploadData, error: uploadErr } = await supabase.storage.from('merchant').upload(filename, fotoFile, { upsert: true })
       if (uploadErr) {
@@ -132,7 +147,12 @@ export default function AdminMerchantPage() {
             .from('produk_varian')
             .delete()
             .in('id', toDeleteIds)
-          if (delErr) throw delErr
+          if (delErr) {
+            if (delErr.code === '23503') {
+              throw new Error('Sebagian ukuran yang ingin dihapus sudah memiliki riwayat pesanan. Anda tidak bisa menghapusnya, silakan ubah stoknya menjadi 0.')
+            }
+            throw delErr
+          }
         }
 
         // Prepare variants to upsert
@@ -142,7 +162,7 @@ export default function AdminMerchantPage() {
             ...(existingId ? { id: existingId } : {}),
             produk_id: editId,
             ukuran: v.ukuran,
-            stok: v.stok
+            stok: Math.max(0, v.stok)
           }
         })
 
@@ -166,7 +186,7 @@ export default function AdminMerchantPage() {
           setSaving(false)
           return
         }
-        const { error: insErr } = await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: p.id, ukuran: v.ukuran, stok: v.stok })))
+        const { error: insErr } = await supabase.from('produk_varian').insert(form.varian.map(v => ({ produk_id: p.id, ukuran: v.ukuran, stok: Math.max(0, v.stok) })))
         if (insErr) throw insErr
       }
       setShowModal(false)
@@ -263,6 +283,12 @@ export default function AdminMerchantPage() {
               </div>
               <div>
                 <label className="block font-bold text-dark text-sm mb-1">Foto Produk</label>
+                {existingFoto && !fotoFile && (
+                  <div className="flex items-center gap-3 mb-2 p-2 bg-background border border-dark/20 rounded-xl">
+                    <img src={existingFoto} alt="Saat ini" className="w-12 h-12 object-cover rounded-lg border border-dark" />
+                    <span className="text-xs text-dark/70 font-bold">Foto saat ini aktif. Pilih file baru untuk mengganti.</span>
+                  </div>
+                )}
                 <input type="file" accept="image/*" className="w-full border-2 border-dark rounded-xl px-4 py-2.5 font-sans text-dark bg-white" onChange={e => setFotoFile(e.target.files?.[0] || null)} />
               </div>
               <div>
@@ -274,7 +300,7 @@ export default function AdminMerchantPage() {
                   {form.varian.map((v, i) => (
                     <div key={i} className="flex gap-2 items-center">
                       <Input value={v.ukuran} onChange={e => updateVarian(i, 'ukuran', e.target.value)} placeholder="Ukuran (e.g. M)" className="flex-1" />
-                      <Input type="number" value={String(v.stok)} onChange={e => updateVarian(i, 'stok', parseInt(e.target.value) || 0)} placeholder="Stok" className="w-24" />
+                      <Input type="number" min={0} value={String(v.stok)} onChange={e => updateVarian(i, 'stok', Math.max(0, parseInt(e.target.value) || 0))} placeholder="Stok" className="w-24" />
                       {form.varian.length > 1 && <button onClick={() => hapusVarian(i)} className="text-red-500 font-bold px-2 text-lg">×</button>}
                     </div>
                   ))}
