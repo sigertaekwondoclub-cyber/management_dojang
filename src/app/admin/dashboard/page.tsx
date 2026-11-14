@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { formatRupiah } from '@/lib/utils'
 import Link from 'next/link'
+import { getAdminDashboardMerchantStatsAction } from '@/app/ortu/merchant/actions'
 
 const supabase = createClient()
 
@@ -63,7 +64,7 @@ export default function AdminDashboardPage() {
     const [
       siswaResult, daftarResult, pelatihResult, iuranResult,
       cashflowResult, honorResult, ujianResult, eventResult,
-      merchantMenungguResult, merchantOmzetResult, stokResult,
+      merchantStatsResult, stokResult,
       // NEW
       absensiHariIniResult, absensiMonthResult,
       iuranBlmBayarResult, siswaAllResult,
@@ -80,8 +81,7 @@ export default function AdminDashboardPage() {
         : Promise.resolve({ data: [] }),
       supabase.from('ujian_sabuk').select('tgl_ujian').gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
       supabase.from('event_kompetisi').select('nama, tgl').gte('tgl', today).order('tgl', { ascending: true }).limit(1),
-      supabase.from('pesanan_merchant').select('id', { count: 'exact', head: true }).eq('status', 'menunggu_verifikasi'),
-      supabase.from('pesanan_merchant').select('total_harga').in('status', ['lunas', 'diproses', 'siap_diambil']).gte('created_at', `${startBulan}T00:00:00`),
+      getAdminDashboardMerchantStatsAction(startBulan),
       supabase.from('produk_varian').select('ukuran, stok, produk_merchant(nama)').lte('stok', 5),
       // NEW queries
       supabase.from('absensi_siswa').select('status_hadir, kelas').eq('tgl', today),
@@ -110,7 +110,7 @@ export default function AdminDashboardPage() {
       if (i.status_bayar === 'lunas') iuranTerkumpul += Number(i.nominal)
       if (i.status_bayar === 'menunggu_verifikasi' && isAktif) tagihanMenunggu++
     })
-    const merchantPemasukan = (merchantOmzetResult.data || []).reduce((acc, c) => acc + Number(c.total_harga), 0)
+    const merchantPemasukan = merchantStatsResult.omzetBulanIni
     let income = iuranTerkumpul + merchantPemasukan, expense = 0
     cashflowResult.data?.forEach((c: any) => {
       const isMerchant = c.sumber === 'merchant' || c.kategori === 'Penjualan Merchant' || (c.keterangan && c.keterangan.includes('[Pesanan #'))
@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
       expense += net
     })
 
-    setStats({ siswaAktif, pelatihAktif: pelatihAktif || 0, iuranTotal, iuranTerkumpul, tagihanMenunggu, daftarBaru, pesananMerchantMenunggu: merchantMenungguResult.count || 0, merchantPemasukan, income, expense })
+    setStats({ siswaAktif, pelatihAktif: pelatihAktif || 0, iuranTotal, iuranTerkumpul, tagihanMenunggu, daftarBaru, pesananMerchantMenunggu: merchantStatsResult.menungguCount, merchantPemasukan, income, expense })
     setUjianMendatang(ujianResult.data?.[0] || null)
     setEventMendatang(eventResult.data?.[0] || null)
     setStokKritis((stokResult.data || []) as any[])

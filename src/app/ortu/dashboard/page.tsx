@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
 import { useOrtuChild } from '@/context/OrtuChildContext'
+import { getOrtuPesananTerbaruAction } from '@/app/ortu/merchant/actions'
 import type { Siswa, Iuran, StatusPesanan, PenilaianAtlet } from '@/lib/types'
 
 const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
@@ -61,7 +62,7 @@ export default function OrtuDashboardPage() {
       supabase.from('absensi_siswa').select('id, tgl, status_hadir').eq('siswa_id', activeChild.id).gte('tgl', startDate).lte('tgl', endDate).order('tgl', { ascending: false }),
       supabase.from('ujian_sabuk').select('tgl_ujian').eq('siswa_id', activeChild.id).gte('tgl_ujian', today).order('tgl_ujian', { ascending: true }).limit(1),
       supabase.from('event_peserta').select('event_kompetisi!inner(nama, tgl)').eq('siswa_id', activeChild.id).eq('status_daftar', 'terdaftar').gte('event_kompetisi.tgl', today).order('event_kompetisi(tgl)', { ascending: true }).limit(1),
-      supabase.from('pesanan_merchant').select('id, status, total_harga, created_at').eq('siswa_id', activeChild.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      getOrtuPesananTerbaruAction(activeChild.id),
       supabase.from('ujian_sabuk').select('id, tgl_ujian, sabuk_asal, sabuk_tujuan, hasil').eq('siswa_id', activeChild.id).order('tgl_ujian', { ascending: false }),
       supabase.from('penilaian_atlet').select('*').eq('siswa_id', activeChild.id).order('periode_tahun', { ascending: false }).order('periode_bulan', { ascending: false }).limit(1).maybeSingle()
     ])
@@ -71,6 +72,8 @@ export default function OrtuDashboardPage() {
 
     if (pesananResult.data) {
       setPesananTerbaru(pesananResult.data)
+    } else {
+      setPesananTerbaru(null)
     }
 
     if (raportResult.data) {

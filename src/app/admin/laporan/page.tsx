@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
+import { getAdminMerchantSalesAction } from '@/app/ortu/merchant/actions'
 
 const supabase = createClient()
 
@@ -132,13 +133,7 @@ export default function AdminLaporanPage() {
         .from('iuran')
         .select('nominal, status_bayar, siswa:siswa_id(nama, status_aktif, program_kelas:program_kelas_id(nama_program))')
         .eq('bulan', bul).eq('tahun', tah),
-      supabase
-        .from('pesanan_merchant')
-        .select('id, total_harga, status, created_at, updated_at, siswa:siswa_id(nama)')
-        .in('status', ['lunas', 'diproses', 'siap_diambil'])
-        .gte('created_at', `${startTgl}T00:00:00`)
-        .lte('created_at', `${endTgl}T23:59:59`)
-        .order('created_at', { ascending: false }),
+      getAdminMerchantSalesAction(startTgl, endTgl),
       supabase
         .from('keuangan_club')
         .select('*')

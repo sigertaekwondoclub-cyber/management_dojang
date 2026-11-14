@@ -1,15 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { batalkanPesananMerchantAction } from '@/app/ortu/merchant/actions'
+import { batalkanPesananMerchantAction, getAdminPesananAction, updatePesananStatusAdminAction } from '@/app/ortu/merchant/actions'
 import type { PesananMerchant, StatusPesanan } from '@/lib/types'
 import { formatRupiah, formatTanggal as formatTgl } from '@/lib/utils'
-
-const supabase = createClient()
 
 const STATUS_CONFIG: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
   menunggu_pembayaran: { label: 'Menunggu Bayar', color: 'accent' },
@@ -32,12 +29,11 @@ export default function AdminPesananMerchantPage() {
 
   const fetchPesanan = useCallback(async () => {
     setLoading(true)
-    let query = supabase.from('pesanan_merchant')
-      .select('*, siswa:siswa_id(nama), pesanan_item(*, produk_merchant:produk_id(nama, foto_url), produk_varian:varian_id(ukuran))')
-      .order('created_at', { ascending: false })
-    if (filterStatus !== 'semua') query = query.eq('status', filterStatus)
-    const { data } = await query
-    setPesananList((data || []) as PesananMerchant[])
+    // Gunakan server action (supabaseAdmin) untuk bypass RLS — admin harus bisa lihat semua pesanan
+    const res = await getAdminPesananAction(filterStatus !== 'semua' ? filterStatus : undefined)
+    if (res.success) {
+      setPesananList(res.pesanan)
+    }
     setLoading(false)
   }, [filterStatus])
 
@@ -54,50 +50,12 @@ export default function AdminPesananMerchantPage() {
   const handleUpdate = async () => {
     if (!selected) return
     setSaving(true)
-    const isPaid = ['lunas', 'diproses', 'siap_diambil'].includes(newStatus)
 
-    // 1. Update status pesanan
-    const { error: updateErr } = await supabase
-      .from('pesanan_merchant')
-      .update({ status: newStatus, catatan_admin: catatanAdmin || null })
-      .eq('id', selected.id)
-
-    if (updateErr) {
-      alert('Gagal update status pesanan: ' + updateErr.message)
+    const res = await updatePesananStatusAdminAction(selected.id, newStatus, catatanAdmin)
+    if (!res.success) {
+      alert('Gagal update status pesanan: ' + (res.message || ''))
       setSaving(false)
       return
-    }
-
-    // 2. Sinkronkan ke tabel keuangan_club
-    const orderTag = `[Pesanan #${selected.id.slice(0, 8)}]`
-    if (isPaid) {
-      // Pastikan tercatat di keuangan_club
-      const { data: existing } = await supabase
-        .from('keuangan_club')
-        .select('id')
-        .ilike('keterangan', `%${orderTag}%`)
-        .maybeSingle()
-
-      if (!existing) {
-        const siswaNama = (selected.siswa as any)?.nama || 'Siswa'
-        const { error: insErr } = await supabase.from('keuangan_club').insert({
-          tgl: new Date().toISOString().split('T')[0],
-          jenis: 'income',
-          kategori: 'Penjualan Merchant',
-          nominal: Number(selected.total_harga || 0),
-          keterangan: `Penjualan Toko ${orderTag} — ${siswaNama}`,
-          sumber: 'merchant'
-        })
-        if (insErr) {
-          console.error('Gagal mencatat kas masuk keuangan_club:', insErr)
-        }
-      }
-    } else {
-      // Jika status dikembalikan ke belum bayar
-      await supabase
-        .from('keuangan_club')
-        .delete()
-        .ilike('keterangan', `%${orderTag}%`)
     }
 
     setSaving(false)

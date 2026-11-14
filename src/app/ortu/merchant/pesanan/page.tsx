@@ -6,10 +6,10 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
-import { useOrtuChild } from '@/context/OrtuChildContext'
-import { uploadBuktiTransferMerchantAction, batalkanPesananMerchantAction } from '@/app/ortu/merchant/actions'
+import { uploadBuktiTransferMerchantAction, batalkanPesananMerchantAction, getOrtuPesananAction } from '@/app/ortu/merchant/actions'
 import type { PesananMerchant, StatusPesanan } from '@/lib/types'
 
+// Supabase client hanya digunakan untuk mengambil info rekening bank (data publik, tidak perlu RLS bypass)
 const supabase = createClient()
 
 const STATUS_CONFIG: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
@@ -28,7 +28,6 @@ function formatTgl(s: string) {
 }
 
 export default function OrtuPesananMerchantPage() {
-  const { activeChild, childrenList, loading: childLoading } = useOrtuChild()
   const [pesananList, setPesananList] = useState<PesananMerchant[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<PesananMerchant | null>(null)
@@ -45,7 +44,7 @@ export default function OrtuPesananMerchantPage() {
     atasNama: 'Siger Taekwondo Club'
   })
 
-  // Fetch Pengaturan Rekening
+  // Fetch Pengaturan Rekening (data publik, aman lewat client)
   useEffect(() => {
     supabase.from('pengaturan_club').select('*').limit(1).single()
       .then(({ data }) => {
@@ -58,25 +57,15 @@ export default function OrtuPesananMerchantPage() {
       })
   }, [])
 
+  // Gunakan server action untuk bypass RLS — data pesanan milik ortu selalu terbaca dengan benar
   const fetchPesanan = useCallback(async () => {
-    const childIds = childrenList.length > 0
-      ? childrenList.map(c => c.id)
-      : (activeChild?.id ? [activeChild.id] : [])
-
-    if (childIds.length === 0) {
-      if (!childLoading) setLoading(false)
-      return
-    }
-
     setLoading(true)
-    const { data } = await supabase.from('pesanan_merchant')
-      .select('*, siswa:siswa_id(nama), pesanan_item(*, produk_merchant:produk_id(nama, foto_url), produk_varian:varian_id(ukuran))')
-      .in('siswa_id', childIds)
-      .order('created_at', { ascending: false })
-
-    setPesananList((data || []) as PesananMerchant[])
+    const res = await getOrtuPesananAction()
+    if (res.success) {
+      setPesananList(res.pesanan)
+    }
     setLoading(false)
-  }, [activeChild, childrenList, childLoading])
+  }, [])
 
   useEffect(() => {
     fetchPesanan()

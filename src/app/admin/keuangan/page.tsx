@@ -16,6 +16,7 @@ import { PrintReportModal } from '@/components/keuangan/PrintReportModal'
 import { BankReconciliationTab } from '@/components/keuangan/BankReconciliationTab'
 import { ProfitLossTab, type PnLDataDetailed } from '@/components/keuangan/ProfitLossTab'
 import { BalanceSheetTab, type BalanceSheetData } from '@/components/keuangan/BalanceSheetTab'
+import { getAdminMerchantSalesAction } from '@/app/ortu/merchant/actions'
 
 // ──────────────────────────────────────────
 // Constants
@@ -237,13 +238,7 @@ export default function AdminKeuanganPage() {
     setHonorDibayar(honorMapped)
 
     // 4. Pesanan Merchant (status lunas, diproses, atau siap_diambil)
-    const { data: merchantData } = await supabase
-      .from('pesanan_merchant')
-      .select('id, total_harga, status, created_at, updated_at, siswa:siswa_id(nama)')
-      .in('status', ['lunas', 'diproses', 'siap_diambil'])
-      .gte('created_at', `${tahun}-01-01T00:00:00`)
-      .lte('created_at', `${tahun}-12-31T23:59:59`)
-      .order('created_at', { ascending: false })
+    const { data: merchantData } = await getAdminMerchantSalesAction(`${tahun}-01-01`, `${tahun}-12-31`)
 
     const merchantMapped = (merchantData || []).map((m: any) => {
       const rawDate = m.updated_at || m.created_at

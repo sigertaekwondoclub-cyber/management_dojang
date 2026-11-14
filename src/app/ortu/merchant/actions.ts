@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import type { PesananMerchant, StatusPesanan } from '@/lib/types'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -345,6 +346,314 @@ export async function batalkanPesananMerchantAction(pesananId: string): Promise<
   } catch (err: any) {
     console.error('Batalkan pesanan error:', err)
     return { success: false, message: err?.message || 'Terjadi kesalahan sistem saat membatalkan pesanan.' }
+  }
+}
+
+export async function getOrtuPesananAction(): Promise<{
+  success: boolean
+  pesanan: PesananMerchant[]
+  message?: string
+}> {
+  try {
+    const supabase = createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, pesanan: [], message: 'Silakan login terlebih dahulu.' }
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role, siswa_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.siswa_id) {
+      return { success: false, pesanan: [], message: 'Akun belum terhubung ke data siswa.' }
+    }
+
+    // Ambil data siswa utama dan saudara (berdasarkan no_hp_ortu)
+    let childIds: string[] = [profile.siswa_id]
+
+    const { data: primSiswa } = await supabaseAdmin
+      .from('siswa')
+      .select('no_hp_ortu')
+      .eq('id', profile.siswa_id)
+      .single()
+
+    if (primSiswa?.no_hp_ortu && primSiswa.no_hp_ortu.trim() !== '') {
+      const { data: siblings } = await supabaseAdmin
+        .from('siswa')
+        .select('id')
+        .eq('no_hp_ortu', primSiswa.no_hp_ortu.trim())
+        .eq('status_aktif', true)
+
+      if (siblings && siblings.length > 0) {
+        childIds = Array.from(new Set([profile.siswa_id, ...siblings.map(s => s.id)]))
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('*, siswa:siswa_id(nama), pesanan_item(*, produk_merchant:produk_id(nama, foto_url), produk_varian:varian_id(ukuran))')
+      .in('siswa_id', childIds)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error getOrtuPesananAction:', error)
+      return { success: false, pesanan: [], message: error.message }
+    }
+
+    return { success: true, pesanan: (data || []) as PesananMerchant[] }
+  } catch (err: any) {
+    console.error('Error getOrtuPesananAction:', err)
+    return { success: false, pesanan: [], message: err?.message || 'Terjadi kesalahan sistem' }
+  }
+}
+
+export async function getAdminPesananAction(filterStatus?: string): Promise<{
+  success: boolean
+  pesanan: PesananMerchant[]
+  stats?: {
+    menungguPembayaran: number
+    menungguVerifikasi: number
+    totalBaru: number
+  }
+  message?: string
+}> {
+  try {
+    const supabase = createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, pesanan: [], message: 'Silakan login terlebih dahulu.' }
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return { success: false, pesanan: [], message: 'Hanya admin yang memiliki akses.' }
+    }
+
+    let query = supabaseAdmin
+      .from('pesanan_merchant')
+      .select('*, siswa:siswa_id(nama), pesanan_item(*, produk_merchant:produk_id(nama, foto_url), produk_varian:varian_id(ukuran))')
+      .order('created_at', { ascending: false })
+
+    if (filterStatus && filterStatus !== 'semua') {
+      query = query.eq('status', filterStatus)
+    }
+
+    const { data, error } = await query
+    if (error) {
+      console.error('Error getAdminPesananAction:', error)
+      return { success: false, pesanan: [], message: error.message }
+    }
+
+    // Hitung status pesanan baru/menunggu
+    const { data: allPending } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('status')
+      .in('status', ['menunggu_pembayaran', 'menunggu_verifikasi'])
+
+    const menungguPembayaran = allPending?.filter(p => p.status === 'menunggu_pembayaran').length || 0
+    const menungguVerifikasi = allPending?.filter(p => p.status === 'menunggu_verifikasi').length || 0
+
+    return {
+      success: true,
+      pesanan: (data || []) as PesananMerchant[],
+      stats: {
+        menungguPembayaran,
+        menungguVerifikasi,
+        totalBaru: menungguPembayaran + menungguVerifikasi
+      }
+    }
+  } catch (err: any) {
+    console.error('Error getAdminPesananAction:', err)
+    return { success: false, pesanan: [], message: err?.message || 'Terjadi kesalahan sistem' }
+  }
+}
+
+export async function getAdminPendingOrdersCountAction(): Promise<{
+  menungguPembayaran: number
+  menungguVerifikasi: number
+  total: number
+}> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('status')
+      .in('status', ['menunggu_pembayaran', 'menunggu_verifikasi'])
+
+    const menungguPembayaran = data?.filter(p => p.status === 'menunggu_pembayaran').length || 0
+    const menungguVerifikasi = data?.filter(p => p.status === 'menunggu_verifikasi').length || 0
+
+    return {
+      menungguPembayaran,
+      menungguVerifikasi,
+      total: menungguPembayaran + menungguVerifikasi
+    }
+  } catch (err) {
+    console.error('getAdminPendingOrdersCountAction error:', err)
+    return { menungguPembayaran: 0, menungguVerifikasi: 0, total: 0 }
+  }
+}
+
+export async function updatePesananStatusAdminAction(
+  pesananId: string,
+  newStatus: StatusPesanan,
+  catatanAdmin?: string
+): Promise<{ success: boolean; message?: string }> {
+  try {
+    const supabase = createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, message: 'Silakan login terlebih dahulu.' }
+    }
+
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role !== 'admin') {
+      return { success: false, message: 'Hanya admin yang memiliki izin mengubah status pesanan.' }
+    }
+
+    // Ambil pesanan saat ini
+    const { data: pesanan, error: pErr } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('*, siswa:siswa_id(nama)')
+      .eq('id', pesananId)
+      .single()
+
+    if (pErr || !pesanan) {
+      return { success: false, message: 'Pesanan tidak ditemukan.' }
+    }
+
+    // 1. Update status pesanan & catatan admin
+    const { error: updateErr } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .update({
+        status: newStatus,
+        catatan_admin: catatanAdmin || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', pesananId)
+
+    if (updateErr) {
+      return { success: false, message: 'Gagal update status pesanan: ' + updateErr.message }
+    }
+
+    // 2. Sinkronisasi keuangan_club
+    const isPaid = ['lunas', 'diproses', 'siap_diambil'].includes(newStatus)
+    const orderTag = `[Pesanan #${pesananId.slice(0, 8)}]`
+
+    if (isPaid) {
+      const { data: existing } = await supabaseAdmin
+        .from('keuangan_club')
+        .select('id')
+        .ilike('keterangan', `%${orderTag}%`)
+        .maybeSingle()
+
+      if (!existing) {
+        const siswaNama = (pesanan.siswa as any)?.nama || 'Siswa'
+        const { error: insErr } = await supabaseAdmin.from('keuangan_club').insert({
+          tgl: new Date().toISOString().split('T')[0],
+          jenis: 'income',
+          kategori: 'Penjualan Merchant',
+          nominal: Number(pesanan.total_harga || 0),
+          keterangan: `Penjualan Toko ${orderTag} — ${siswaNama}`,
+          sumber: 'merchant'
+        })
+        if (insErr) {
+          console.error('Gagal mencatat kas masuk keuangan_club:', insErr)
+        }
+      }
+    } else {
+      // Jika status dikembalikan ke belum lunas
+      await supabaseAdmin
+        .from('keuangan_club')
+        .delete()
+        .ilike('keterangan', `%${orderTag}%`)
+    }
+
+    return { success: true, message: 'Status pesanan berhasil diperbarui.' }
+  } catch (err: any) {
+    console.error('updatePesananStatusAdminAction error:', err)
+    return { success: false, message: err?.message || 'Terjadi kesalahan sistem' }
+  }
+}
+
+export async function getAdminDashboardMerchantStatsAction(startBulan: string): Promise<{
+  menungguCount: number
+  omzetBulanIni: number
+}> {
+  try {
+    const [pendingRes, omzetRes] = await Promise.all([
+      supabaseAdmin
+        .from('pesanan_merchant')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['menunggu_pembayaran', 'menunggu_verifikasi']),
+      supabaseAdmin
+        .from('pesanan_merchant')
+        .select('total_harga')
+        .in('status', ['lunas', 'diproses', 'siap_diambil'])
+        .gte('created_at', `${startBulan}T00:00:00`),
+    ])
+
+    const menungguCount = pendingRes.count || 0
+    const omzetBulanIni = (omzetRes.data || []).reduce((acc, c) => acc + Number(c.total_harga || 0), 0)
+
+    return { menungguCount, omzetBulanIni }
+  } catch (err) {
+    console.error('getAdminDashboardMerchantStatsAction error:', err)
+    return { menungguCount: 0, omzetBulanIni: 0 }
+  }
+}
+
+export async function getOrtuPesananTerbaruAction(siswaId: string): Promise<{
+  data: { id: string; status: StatusPesanan; total_harga: number; created_at: string } | null
+}> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('id, status, total_harga, created_at')
+      .eq('siswa_id', siswaId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    return { data: data as any }
+  } catch (err) {
+    console.error('getOrtuPesananTerbaruAction error:', err)
+    return { data: null }
+  }
+}
+
+export async function getAdminMerchantSalesAction(startDate: string, endDate: string): Promise<{
+  data: any[]
+}> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('pesanan_merchant')
+      .select('id, total_harga, status, created_at, updated_at, siswa:siswa_id(nama)')
+      .in('status', ['lunas', 'diproses', 'siap_diambil'])
+      .gte('created_at', `${startDate}T00:00:00`)
+      .lte('created_at', `${endDate}T23:59:59`)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('getAdminMerchantSalesAction error:', error)
+      return { data: [] }
+    }
+    return { data: data || [] }
+  } catch (err) {
+    console.error('getAdminMerchantSalesAction error:', err)
+    return { data: [] }
   }
 }
 
