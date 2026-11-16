@@ -1,9 +1,19 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card } from '@/components/ui/Card'
 import { useOrtuChild } from '@/context/OrtuChildContext'
+import { AthleteCard } from '@/components/atlet/AthleteCard'
+import { AthleteRadarChart } from '@/components/atlet/AthleteRadarChart'
+import { LevelUpMission } from '@/components/atlet/LevelUpMission'
+import {
+  mapLegacyPenilaianToStats,
+  calculateOVR,
+  determineArchetype,
+  getOVRTier,
+  clampScore,
+} from '@/lib/athlete-stats'
 import type { PenilaianAtlet } from '@/lib/types'
 
 const supabase = createClient()
@@ -82,6 +92,10 @@ export default function OrtuLaporanPage() {
     }
   }, [fetchData, activeChild, childLoading])
 
+  const stats = useMemo(() => {
+    return raport ? mapLegacyPenilaianToStats(raport) : null
+  }, [raport])
+
   const handleShareWA = () => {
     if (!activeChild) return
     const bul = BULAN_NAMES[parseInt(filterBulan)]
@@ -90,33 +104,45 @@ export default function OrtuLaporanPage() {
       menunggu_verifikasi: '🔍 MENUNGGU VERIFIKASI', ditolak: '❌ DITOLAK'
     }
     
-    let teks = `📊 *RAPORT & REKAP PERKEMBANGAN SIGER TAEKWONDO*\n`
-    teks += `👤 *${activeChild.nama}* (Sabuk ${activeChild.sabuk_saat_ini})\n`
+    let teks = `🥋 *STATISTIK & RAPORT ATLET SIGER TAEKWONDO*\n`
+    teks += `👤 *${activeChild.nama}* (Sabuk ${activeChild.sabuk_saat_ini || 'Putih'})\n`
     teks += `📅 Periode: ${bul} ${filterTahun}\n\n`
+
+    if (raport) {
+      const athleteStats = stats || mapLegacyPenilaianToStats(raport)
+      const ovr = typeof raport.ovr_score === 'number' && raport.ovr_score > 0
+        ? clampScore(raport.ovr_score)
+        : calculateOVR(athleteStats)
+      const tier = getOVRTier(ovr)
+      const archetype = raport.archetype || determineArchetype(athleteStats)
+
+      teks += `⭐ *OVR: ${ovr}/100* (${tier.badge} / Archetype: ${archetype})\n`
+      teks += `• STR (Kekuatan): ${athleteStats.skor_str}/100\n`
+      teks += `• AGI (Kecepatan): ${athleteStats.skor_agi}/100\n`
+      teks += `• FLX (Kelenturan): ${athleteStats.skor_flx}/100\n`
+      teks += `• STA (Stamina): ${athleteStats.skor_sta}/100\n`
+      teks += `• TEC (Teknik): ${athleteStats.skor_tec}/100\n`
+      teks += `• DIS (Disiplin): ${athleteStats.skor_dis}/100\n`
+
+      if (raport.rekomendasi) {
+        teks += `• Rekomendasi: ${raport.rekomendasi.replace('_', ' ').toUpperCase()}\n`
+      }
+      if (raport.catatan_pelatih) {
+        teks += `• Catatan Pelatih: "${raport.catatan_pelatih}"\n`
+      }
+      teks += `\n`
+    }
 
     teks += `✅ *KEHADIRAN LATIHAN*\n`
     teks += `• Hadir: ${absensi.hadir}x dari ${absensi.total} sesi${absensi.total > 0 ? ` (${absensi.persen}%)` : ''}\n`
     teks += `• Izin: ${absensi.izin}x | Sakit: ${absensi.sakit}x | Alpha: ${absensi.alpha}x\n\n`
 
-    if (raport) {
-      const avg = Math.round((raport.skor_fisik + raport.skor_kyorugi + raport.skor_poomsae + raport.skor_disiplin) / 4)
-      teks += `🥋 *EVALUASI PELATIH (Skor Rata-Rata: ${avg}/100)*\n`
-      teks += `• Fisik & Stamina: ${raport.skor_fisik}/100\n`
-      teks += `• Kyorugi (Tarung): ${raport.skor_kyorugi}/100\n`
-      teks += `• Poomsae (Jurus): ${raport.skor_poomsae}/100\n`
-      teks += `• Disiplin & Sikap: ${raport.skor_disiplin}/100\n`
-      if (raport.rekomendasi) {
-        teks += `• Rekomendasi: ${raport.rekomendasi.toUpperCase()}\n`
-      }
-      if (raport.catatan_pelatih) {
-        teks += `• Catatan: "${raport.catatan_pelatih}"\n`
-      }
-      teks += `\n`
-    }
-
     teks += `💰 *STATUS IURAN*\n`
     teks += `• ${bul} ${filterTahun}: ${iuran ? (statusLabel[iuran.status_bayar] || iuran.status_bayar) : '❌ BELUM ADA DATA'}${iuran?.nominal ? ` (${formatRupiah(iuran.nominal)})` : ''}\n\n`
-    teks += `_Siger Taekwondo Club 🥋_`
+
+    const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://sigertc.com'
+    teks += `_Siger Taekwondo Club 🥋_\n`
+    teks += `Pantau profil & latihan di: ${origin}`
 
     window.open(`https://wa.me/?text=${encodeURIComponent(teks)}`, '_blank')
   }
@@ -126,13 +152,6 @@ export default function OrtuLaporanPage() {
     belum_bayar: { label: '❌ Belum Bayar', cls: 'text-red-600 bg-red-50 border-red-200' },
     menunggu_verifikasi: { label: '🔍 Menunggu Verifikasi', cls: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
     ditolak: { label: '❌ Ditolak', cls: 'text-red-600 bg-red-50 border-red-200' },
-  }
-
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return 'bg-green-500 text-green-700'
-    if (score >= 70) return 'bg-blue-500 text-blue-700'
-    if (score >= 50) return 'bg-yellow-500 text-yellow-700'
-    return 'bg-red-500 text-red-700'
   }
 
   if (childLoading) {
@@ -175,64 +194,81 @@ export default function OrtuLaporanPage() {
         <Card className="text-center py-16 text-dark/50">Memuat data laporan...</Card>
       ) : (
         <>
-          {/* Raport Evaluasi 4 Pilar Pelatih */}
-          <Card className="border-[3px] border-dark">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h2 className="font-bold text-dark text-lg">🥋 Raport Penilaian Atlet</h2>
-                <p className="text-xs text-dark/60 font-sans">Evaluasi berkala oleh tim pelatih dojang</p>
-              </div>
-              {raport?.rekomendasi && (
-                <span className={`px-3 py-1 text-xs font-bold uppercase rounded-lg border border-dark ${
-                  raport.rekomendasi === 'siap_ujian' ? 'bg-primary text-dark' :
-                  raport.rekomendasi === 'siap_tanding' ? 'bg-secondary text-dark' :
-                  'bg-yellow-100 text-dark'
-                }`}>
-                  {raport.rekomendasi.replace('_', ' ')}
-                </span>
-              )}
-            </div>
+          {/* Raport & Athlete Card Section */}
+          {raport && stats ? (
+            <>
+              {/* Siger Athlete Card (OVR, Archetype, Sabuk, Mini-Stats) */}
+              <AthleteCard
+                siswa={activeChild}
+                penilaian={raport}
+                scores={stats}
+              />
 
-            {!raport ? (
-              <div className="p-6 bg-background border-2 border-dashed border-dark/20 text-center rounded-xl">
-                <p className="text-sm font-bold text-dark/60">Belum ada raport penilaian pelatih untuk periode ini.</p>
-                <p className="text-xs text-dark/40 mt-1">Pelatih akan menginput evaluasi fisik, teknik, dan disiplin secara berkala.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-5">
-                {/* 4 Pillars Progress */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {[
-                    { label: '💪 Fisik & Stamina', score: raport.skor_fisik },
-                    { label: '🥊 Kyorugi (Tarung)', score: raport.skor_kyorugi },
-                    { label: '🥋 Poomsae (Jurus)', score: raport.skor_poomsae },
-                    { label: '⭐ Disiplin & Sikap', score: raport.skor_disiplin },
-                  ].map(pillar => (
-                    <div key={pillar.label} className="p-3 bg-background border-2 border-dark/10 rounded-xl flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center text-xs font-bold text-dark">
-                        <span>{pillar.label}</span>
-                        <span className="font-mono text-sm">{pillar.score} / 100</span>
-                      </div>
-                      <div className="h-3 bg-white border border-dark/20 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-700 ${getScoreColor(pillar.score).split(' ')[0]}`}
-                          style={{ width: `${pillar.score}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
+              {/* Hexagon Radar Chart & Rekomendasi/Catatan Pelatih */}
+              <Card className="border-[3px] border-dark flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <div>
+                    <h2 className="font-bold text-dark text-lg flex items-center gap-2">
+                      <span>📊</span>
+                      <span>Hexagon Radar &amp; Evaluasi Pelatih</span>
+                    </h2>
+                    <p className="text-xs text-dark/60 font-sans">
+                      Visualisasi 6 pilar atribut performa atlet periode {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}
+                    </p>
+                  </div>
+                  {raport.rekomendasi && (
+                    <span className={`px-3 py-1 text-xs font-bold uppercase rounded-lg border border-dark ${
+                      raport.rekomendasi === 'siap_ujian' ? 'bg-primary text-dark' :
+                      raport.rekomendasi === 'siap_tanding' ? 'bg-secondary text-dark' :
+                      'bg-yellow-100 text-dark'
+                    }`}>
+                      {raport.rekomendasi.replace('_', ' ')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Hexagon Radar Interactive Component */}
+                <div className="bg-white border-2 border-dark p-3 sm:p-4 shadow-[2px_2px_0px_#1E2A38]">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-pixel text-[11px] text-dark/80 font-bold uppercase tracking-wider">
+                      HEXAGON STATS RADAR (6 PILAR)
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-sans">
+                      Arahkan kursor / sentuh titik untuk melihat nilai
+                    </span>
+                  </div>
+                  <AthleteRadarChart scores={stats} height={300} showTooltip={true} />
                 </div>
 
                 {/* Catatan Pelatih */}
                 {raport.catatan_pelatih && (
                   <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
                     <p className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-1">📝 Catatan Pelatih:</p>
-                    <p className="text-sm text-dark font-sans italic">"{raport.catatan_pelatih}"</p>
+                    <p className="text-sm text-dark font-sans italic">&ldquo;{raport.catatan_pelatih}&rdquo;</p>
                   </div>
                 )}
+              </Card>
+
+              {/* Rekomendasi Latihan Mandiri / Misi Level Up */}
+              <LevelUpMission
+                scores={stats}
+                siswaName={activeChild.nama}
+              />
+            </>
+          ) : (
+            <Card className="border-[3px] border-dark">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h2 className="font-bold text-dark text-lg">🥋 Raport Penilaian Atlet</h2>
+                  <p className="text-xs text-dark/60 font-sans">Evaluasi berkala oleh tim pelatih dojang</p>
+                </div>
               </div>
-            )}
-          </Card>
+              <div className="p-6 bg-background border-2 border-dashed border-dark/20 text-center rounded-xl">
+                <p className="text-sm font-bold text-dark/60">Belum ada raport penilaian pelatih untuk periode ini.</p>
+                <p className="text-xs text-dark/40 mt-1">Pelatih akan menginput evaluasi fisik, teknik, dan disiplin secara berkala.</p>
+              </div>
+            </Card>
+          )}
 
           {/* Kehadiran */}
           <Card>

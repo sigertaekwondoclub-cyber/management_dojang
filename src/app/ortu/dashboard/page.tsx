@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import Link from 'next/link'
 import { useOrtuChild } from '@/context/OrtuChildContext'
 import { getOrtuPesananTerbaruAction } from '@/app/ortu/merchant/actions'
+import { AthleteCard } from '@/components/atlet/AthleteCard'
 import type { Siswa, Iuran, StatusPesanan, PenilaianAtlet } from '@/lib/types'
 
 const STATUS_CONFIG_PESANAN: Record<StatusPesanan, { label: string; color: 'primary' | 'secondary' | 'accent' | 'dark' }> = {
@@ -221,33 +222,47 @@ export default function OrtuDashboardPage() {
         </div>
       </div>
 
-      {/* Raport Highlight */}
+      {/* Siger Athlete Card & Raport Highlight */}
       {raportTerbaru && (
-        <Card className="border-[3px] border-dark bg-gradient-to-r from-yellow-50 to-white">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📊</span>
-                <h3 className="font-pixel text-base text-dark">Raport Evaluasi Pelatih</h3>
-                {raportTerbaru.rekomendasi && (
-                  <span className="px-2 py-0.5 bg-primary border border-dark text-[10px] font-bold uppercase rounded">
-                    {raportTerbaru.rekomendasi.replace('_', ' ')}
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-dark/70 font-sans mt-1">
-                Skor Rata-Rata: <b className="text-dark font-mono text-sm">{Math.round((raportTerbaru.skor_fisik + raportTerbaru.skor_kyorugi + raportTerbaru.skor_poomsae + raportTerbaru.skor_disiplin) / 4)}/100</b>
-                {raportTerbaru.catatan_pelatih && <span> • <i>"{raportTerbaru.catatan_pelatih}"</i></span>}
-              </p>
-            </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <h2 className="font-pixel text-base sm:text-lg text-dark flex items-center gap-2">
+              <span>🥋</span>
+              <span>Kartu Performa Atlet</span>
+            </h2>
             <Link
               href="/ortu/laporan"
-              className="px-4 py-2 bg-dark text-white font-pixel text-xs rounded-xl shadow hover:bg-dark/80 shrink-0"
+              className="text-xs font-pixel text-dark/70 hover:text-dark underline decoration-2"
             >
               Lihat Raport Lengkap →
             </Link>
           </div>
-        </Card>
+
+          <AthleteCard
+            siswa={activeChild}
+            penilaian={raportTerbaru}
+          />
+
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white border-[3px] border-dark p-3.5 shadow-[3px_3px_0px_#1E2A38]">
+            <div className="text-xs font-sans text-dark/80">
+              <span className="font-bold text-dark font-pixel text-[11px] uppercase mr-2">Evaluasi:</span>
+              {raportTerbaru.rekomendasi && (
+                <span className="px-2 py-0.5 bg-primary border border-dark text-[10px] font-bold uppercase rounded mr-2">
+                  {raportTerbaru.rekomendasi.replace('_', ' ')}
+                </span>
+              )}
+              {raportTerbaru.catatan_pelatih && (
+                <span className="italic text-dark">&ldquo;{raportTerbaru.catatan_pelatih}&rdquo;</span>
+              )}
+            </div>
+            <Link
+              href="/ortu/laporan"
+              className="w-full sm:w-auto text-center px-4 py-2 bg-primary hover:bg-primary/90 border-2 border-dark text-dark font-pixel text-xs shadow-[2px_2px_0px_#1E2A38] transition-all shrink-0"
+            >
+              Lihat Detail Radar &amp; Misi Level Up →
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* ── BARIS 2: Progress Sabuk & Detail Absensi ── */}
