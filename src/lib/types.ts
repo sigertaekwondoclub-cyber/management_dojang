@@ -346,6 +346,35 @@ export interface KeranjangItem {
   qty: number
 }
 
+export interface SixAttributes {
+  skor_str: number
+  skor_agi: number
+  skor_flx: number
+  skor_sta: number
+  skor_tec: number
+  skor_dis: number
+}
+
+export interface RawTestData {
+  pushup_count?: number
+  split_cm?: number
+  kicking_speed_count?: number
+  skipping_sec?: number
+  technique_stars?: number
+  persen_kehadiran?: number
+}
+
+export interface LevelUpMission {
+  id?: string
+  attribute: keyof SixAttributes
+  attributeLabel: string
+  score: number
+  title: string
+  target: string
+  description: string
+  icon: string
+}
+
 export interface PenilaianAtlet {
   id: string
   siswa_id: string
@@ -356,6 +385,16 @@ export interface PenilaianAtlet {
   skor_kyorugi: number
   skor_poomsae: number
   skor_disiplin: number
+  // Atribut Baru
+  skor_str: number
+  skor_agi: number
+  skor_flx: number
+  skor_sta: number
+  skor_tec: number
+  skor_dis: number
+  ovr_score: number
+  archetype: string
+  raw_test_data: RawTestData | null
   catatan_pelatih: string | null
   rekomendasi: string | null
   created_at: string
