@@ -150,6 +150,7 @@ export async function getAdminInventarisData() {
     return {
       success: false,
       error: err.message || 'Gagal memuat data inventaris',
+      message: err.message || 'Gagal memuat data inventaris',
       data: {
         barang: [] as InventarisBarang[],
         pembelian: [] as InventarisPembelian[],
@@ -210,6 +211,7 @@ export async function tambahBarangMaster(data: TambahBarangInput) {
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal menambahkan barang master',
       message: err.message || 'Gagal menambahkan barang master',
     }
   }
@@ -277,6 +279,7 @@ export async function updateKondisiBarang(id: string, data: UpdateKondisiInput) 
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal memperbarui kondisi barang',
       message: err.message || 'Gagal memperbarui kondisi barang',
     }
   }
@@ -288,6 +291,7 @@ export async function updateKondisiBarang(id: string, data: UpdateKondisiInput) 
  * - Jika barang master baru: membuat entri inventaris_barang baru.
  * - Jika catat_ke_kas = true: memasukkan pengeluaran ke keuangan_club.
  * - Menyimpan log ke inventaris_pembelian.
+ * - Mengaplikasikan rollback kompensasi jika gagal menyimpan log pembelian.
  */
 export async function catatPembelianBaru(data: CatatPembelianInput) {
   try {
@@ -310,6 +314,7 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
 
     const totalBiaya = jumlah * hargaSatuan
     let finalBarangId = data.barang_id || null
+    const isNewMaster = !finalBarangId
 
     // 1. Update / Buat master inventaris_barang
     if (finalBarangId) {
@@ -375,6 +380,22 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
         .single()
 
       if (kasErr || !kas) {
+        // Rollback master stock if cash insertion fails
+        if (isNewMaster && finalBarangId) {
+          await supabaseAdmin.from('inventaris_barang').delete().eq('id', finalBarangId)
+        } else if (!isNewMaster && finalBarangId) {
+          const { data: b } = await supabaseAdmin
+            .from('inventaris_barang')
+            .select('kondisi_baik')
+            .eq('id', finalBarangId)
+            .single()
+          if (b) {
+            await supabaseAdmin
+              .from('inventaris_barang')
+              .update({ kondisi_baik: Math.max(0, b.kondisi_baik - jumlah) })
+              .eq('id', finalBarangId)
+          }
+        }
         throw new Error('Gagal mencatat pengeluaran kas: ' + (kasErr?.message || ''))
       }
       keuanganId = kas.id
@@ -400,6 +421,25 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
       .single()
 
     if (pErr) {
+      // Compensatory rollback: bersihkan baris keuangan_club & master barang jika log pembelian gagal
+      if (keuanganId) {
+        await supabaseAdmin.from('keuangan_club').delete().eq('id', keuanganId)
+      }
+      if (isNewMaster && finalBarangId) {
+        await supabaseAdmin.from('inventaris_barang').delete().eq('id', finalBarangId)
+      } else if (!isNewMaster && finalBarangId) {
+        const { data: b } = await supabaseAdmin
+          .from('inventaris_barang')
+          .select('kondisi_baik')
+          .eq('id', finalBarangId)
+          .single()
+        if (b) {
+          await supabaseAdmin
+            .from('inventaris_barang')
+            .update({ kondisi_baik: Math.max(0, b.kondisi_baik - jumlah) })
+            .eq('id', finalBarangId)
+        }
+      }
       throw new Error('Gagal mencatat log pembelian: ' + pErr.message)
     }
 
@@ -417,6 +457,7 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal mencatat pembelian',
       message: err.message || 'Gagal mencatat pembelian',
     }
   }
@@ -424,9 +465,9 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
 
 /**
  * Menghapus catatan pembelian:
+ * - Menghapus catatan pembelian terlebih dahulu demi resiliensi urutan eksekusi
  * - Mengurangi stok barang master terkait
  * - Menghapus catatan pengeluaran di keuangan_club jika ada
- * - Menghapus baris inventaris_pembelian
  */
 export async function hapusPembelian(id: string) {
   try {
@@ -442,7 +483,17 @@ export async function hapusPembelian(id: string) {
       throw new Error('Data pembelian tidak ditemukan')
     }
 
-    // 1. Kurangi stok barang terkait jika barang_id masih ada
+    // 1. Hapus catatan pembelian terlebih dahulu agar kegagalan delete tidak meninggalkan status inkonsisten
+    const { error: dErr } = await supabaseAdmin
+      .from('inventaris_pembelian')
+      .delete()
+      .eq('id', id)
+
+    if (dErr) {
+      throw new Error('Gagal menghapus catatan pembelian: ' + dErr.message)
+    }
+
+    // 2. Kurangi stok barang terkait jika barang_id masih ada
     if (pembelian.barang_id) {
       const { data: barang } = await supabaseAdmin
         .from('inventaris_barang')
@@ -462,22 +513,12 @@ export async function hapusPembelian(id: string) {
       }
     }
 
-    // 2. Hapus catatan kas jika ada
+    // 3. Hapus catatan kas jika ada
     if (pembelian.keuangan_id) {
       await supabaseAdmin
         .from('keuangan_club')
         .delete()
         .eq('id', pembelian.keuangan_id)
-    }
-
-    // 3. Hapus catatan pembelian
-    const { error: dErr } = await supabaseAdmin
-      .from('inventaris_pembelian')
-      .delete()
-      .eq('id', id)
-
-    if (dErr) {
-      throw new Error('Gagal menghapus catatan pembelian: ' + dErr.message)
     }
 
     revalidatePath('/admin/inventaris')
@@ -493,6 +534,7 @@ export async function hapusPembelian(id: string) {
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal menghapus data pembelian',
       message: err.message || 'Gagal menghapus data pembelian',
     }
   }
@@ -585,6 +627,7 @@ export async function catatPeminjamanAdmin(data: CatatPeminjamanInput) {
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal mencatat peminjaman',
       message: err.message || 'Gagal mencatat peminjaman',
     }
   }
@@ -688,6 +731,7 @@ export async function kembalikanPeminjaman(
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal memproses pengembalian alat',
       message: err.message || 'Gagal memproses pengembalian alat',
     }
   }
@@ -733,6 +777,7 @@ export async function updateStatusPengajuan(
   } catch (err: any) {
     return {
       success: false,
+      error: err.message || 'Gagal memperbarui status pengajuan',
       message: err.message || 'Gagal memperbarui status pengajuan',
     }
   }
