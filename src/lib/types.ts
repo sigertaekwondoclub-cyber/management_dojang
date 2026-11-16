@@ -406,3 +406,83 @@ export interface PenilaianAtlet {
   }
   pelatih?: Pick<Pelatih, 'nama'>
 }
+
+export type KategoriInventaris = 
+  | 'Target & Kicking'
+  | 'Proteksi & Sparring'
+  | 'Fasilitas Dojang'
+  | 'Elektronik & Scoring'
+  | 'Lainnya'
+
+export interface InventarisBarang {
+  id: string
+  kode_barang: string
+  nama_barang: string
+  kategori: KategoriInventaris
+  total_stok: number
+  kondisi_baik: number
+  kondisi_rusak_ringan: number
+  kondisi_rusak_berat: number
+  stok_dipinjam: number
+  lokasi_penyimpanan: string
+  keterangan?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InventarisPembelian {
+  id: string
+  barang_id?: string | null
+  nama_barang: string
+  kategori: string
+  tgl_beli: string
+  jumlah: number
+  harga_satuan: number
+  total_biaya: number
+  toko_vendor?: string | null
+  catat_ke_kas: boolean
+  keuangan_id?: string | null
+  created_by?: string | null
+  created_at: string
+  inventaris_barang?: {
+    nama_barang: string
+  } | null
+}
+
+export interface InventarisPeminjaman {
+  id: string
+  barang_id: string
+  pelatih_id?: string | null
+  nama_peminjam: string
+  jumlah: number
+  tgl_pinjam: string
+  tgl_rencana_kembali: string
+  tgl_kembali?: string | null
+  keperluan: string
+  status: 'dipinjam' | 'kembali' | 'terlambat'
+  catatan_kondisi_kembali?: string | null
+  created_by?: string | null
+  created_at: string
+  inventaris_barang?: {
+    nama_barang: string
+    kode_barang: string
+  } | null
+}
+
+export interface InventarisPengajuan {
+  id: string
+  pelatih_id: string
+  nama_barang: string
+  kategori: string
+  jumlah: number
+  estimasi_harga?: number | null
+  alasan: string
+  status: 'menunggu' | 'disetujui' | 'ditolak'
+  catatan_admin?: string | null
+  created_at: string
+  updated_at: string
+  pelatih?: {
+    nama: string
+  } | null
+}
+
