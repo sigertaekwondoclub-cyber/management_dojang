@@ -106,18 +106,29 @@ export function clampScore(score: number): number {
 
 /**
  * Hitung usia akurat berdasarkan ISO date string tanggal lahir.
+ * Kebal terhadap pergeseran timezone UTC dengan parsing tokenisasi YYYY-MM-DD.
  * Default ke 0 jika tanggal lahir kosong/invalid (kategori anak-anak).
  */
 export function calculateAge(tglLahir?: string | null, referenceDate: Date = new Date()): number {
   if (!tglLahir || typeof tglLahir !== 'string') return 0
 
-  const birthDate = new Date(tglLahir)
-  if (isNaN(birthDate.getTime())) return 0
+  const datePart = tglLahir.split('T')[0]
+  const parts = datePart.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((n) => isNaN(n))) return 0
 
-  let age = referenceDate.getFullYear() - birthDate.getFullYear()
-  const monthDiff = referenceDate.getMonth() - birthDate.getMonth()
+  const [birthYear, birthMonth, birthDay] = parts
+  if (birthYear <= 1900 || birthMonth < 1 || birthMonth > 12 || birthDay < 1 || birthDay > 31) {
+    return 0
+  }
 
-  if (monthDiff < 0 || (monthDiff === 0 && referenceDate.getDate() < birthDate.getDate())) {
+  const refYear = referenceDate.getFullYear()
+  const refMonth = referenceDate.getMonth() + 1
+  const refDay = referenceDate.getDate()
+
+  let age = refYear - birthYear
+  const monthDiff = refMonth - birthMonth
+
+  if (monthDiff < 0 || (monthDiff === 0 && refDay < birthDay)) {
     age--
   }
 
@@ -403,12 +414,17 @@ export function mapLegacyPenilaianToStats(
   // Jika kolom 6 atribut baru sudah terisi secara valid, gunakan nilai tersebut
   if (
     typeof penilaian.skor_str === 'number' &&
+    !isNaN(penilaian.skor_str) &&
     typeof penilaian.skor_agi === 'number' &&
+    !isNaN(penilaian.skor_agi) &&
     typeof penilaian.skor_flx === 'number' &&
+    !isNaN(penilaian.skor_flx) &&
     typeof penilaian.skor_sta === 'number' &&
+    !isNaN(penilaian.skor_sta) &&
     typeof penilaian.skor_tec === 'number' &&
+    !isNaN(penilaian.skor_tec) &&
     typeof penilaian.skor_dis === 'number' &&
-    penilaian.skor_str > 0
+    !isNaN(penilaian.skor_dis)
   ) {
     return {
       skor_str: clampScore(penilaian.skor_str),

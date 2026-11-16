@@ -58,6 +58,8 @@ console.log('[Test Group 1] calculateAge & isChildCategory')
 const refDate = new Date('2026-11-16T00:00:00Z')
 
 assertEqual(stats.calculateAge('2014-11-16', refDate), 12, 'Exact 12th birthday today')
+assertEqual(stats.calculateAge('2014-11-16T23:59:59Z', refDate), 12, 'ISO timestamp with time tokenized cleanly without day shift')
+assertEqual(stats.calculateAge('2014-11-16T00:00:00.000Z', refDate), 12, 'ISO timestamp with midnight tokenized cleanly')
 assertEqual(stats.calculateAge('2014-11-17', refDate), 11, '1 day before 12th birthday (age 11)')
 assertEqual(stats.calculateAge('2014-11-15', refDate), 12, '1 day after 12th birthday (age 12)')
 assertEqual(stats.calculateAge('2018-05-20', refDate), 8, '8 years old child')
@@ -238,6 +240,18 @@ const modernData = {
 const mappedModern = stats.mapLegacyPenilaianToStats(modernData)
 assertEqual(mappedModern.skor_str, 88, 'Modern data retains original skor_str')
 assertEqual(mappedModern.skor_tec, 90, 'Modern data retains original skor_tec')
+
+// Legitimate score of 0 should be preserved, not fall back to legacy formula
+const zeroScorePenilaian = {
+  skor_str: 0,
+  skor_agi: 70,
+  skor_flx: 65,
+  skor_sta: 60,
+  skor_tec: 55,
+  skor_dis: 80,
+}
+const mappedZero = stats.mapLegacyPenilaianToStats(zeroScorePenilaian)
+assertEqual(mappedZero.skor_str, 0, 'Legitimate score of 0 for skor_str is retained without fallback')
 
 // Legacy data (only 4 pillars)
 const legacyData = {

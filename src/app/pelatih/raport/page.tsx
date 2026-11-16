@@ -159,12 +159,12 @@ export default function PelatihRaportPage() {
       .lte('tgl', endDate)
 
     if (error || !data) {
-      return { total: 0, hadir: 0, percent: 100 }
+      return { total: 0, hadir: 0, percent: 0 }
     }
 
     const total = data.length
     const hadir = data.filter((d) => d.status_hadir === 'hadir').length
-    const percent = total > 0 ? Math.round((hadir / total) * 100) : 100
+    const percent = total > 0 ? Math.round((hadir / total) * 100) : 0
 
     return { total, hadir, percent }
   }
@@ -482,7 +482,7 @@ export default function PelatihRaportPage() {
       {isModalOpen && selectedSiswa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-dark/60 backdrop-blur-sm">
           <div
-            className="relative bg-white border-3 border-dark shadow-[8px_8px_0px_#1E2A38] w-full max-w-xl rounded-2xl p-5 sm:p-6 z-10 flex flex-col gap-4 max-h-[92vh] overflow-y-auto"
+            className="relative bg-white border-[3px] border-dark shadow-[8px_8px_0px_#1E2A38] w-full max-w-xl rounded-2xl p-5 sm:p-6 z-10 flex flex-col gap-4 max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -517,6 +517,10 @@ export default function PelatihRaportPage() {
                   Presensi Periode Ini:{' '}
                   {loadingAttendance ? (
                     '...'
+                  ) : attendanceStats.total === 0 ? (
+                    <span className="font-mono text-dark font-black">
+                      N/A (Belum ada sesi)
+                    </span>
                   ) : (
                     <span className="font-mono text-dark font-black">
                       {attendanceStats.hadir} / {attendanceStats.total} Sesi ({attendanceStats.percent}%)
@@ -770,6 +774,7 @@ export default function PelatihRaportPage() {
           siswa={selectedSiswa}
           initialRawData={formData.raw_test_data}
           attendancePercent={attendanceStats.percent}
+          totalSessions={attendanceStats.total}
           onApply={(scores, rawData) => {
             setFormData((prev) => ({
               ...prev,

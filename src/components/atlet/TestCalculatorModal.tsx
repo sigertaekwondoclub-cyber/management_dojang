@@ -10,6 +10,7 @@ import {
   determineArchetype,
   getOVRTier,
   ATTRIBUTE_CONFIG,
+  clampScore,
 } from '@/lib/athlete-stats'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -20,6 +21,7 @@ export interface TestCalculatorModalProps {
   siswa: Siswa
   initialRawData?: RawTestData | null
   attendancePercent?: number
+  totalSessions?: number
   initialAttitude?: number
   onApply: (scores: SixAttributes, rawData: RawTestData) => void
 }
@@ -30,6 +32,7 @@ export function TestCalculatorModal({
   siswa,
   initialRawData,
   attendancePercent = 100,
+  totalSessions,
   initialAttitude = 85,
   onApply,
 }: TestCalculatorModalProps) {
@@ -128,7 +131,10 @@ export function TestCalculatorModal({
     const flx = convertRawTestToScore('split_cm', splitCm, age)
     const sta = convertRawTestToScore('skipping_sec', skippingSec, age)
     const tec = convertRawTestToScore('technique_stars', techniqueStars, age)
-    const dis = convertRawTestToScore('discipline', attendancePercent, age, { attitudeScore })
+    const dis =
+      totalSessions === 0
+        ? clampScore(attitudeScore)
+        : convertRawTestToScore('discipline', attendancePercent, age, { attitudeScore })
 
     return {
       skor_str: str,
@@ -138,7 +144,7 @@ export function TestCalculatorModal({
       skor_tec: tec,
       skor_dis: dis,
     }
-  }, [pushupCount, kickingCount, splitCm, skippingSec, techniqueStars, attendancePercent, attitudeScore, age])
+  }, [pushupCount, kickingCount, splitCm, skippingSec, techniqueStars, attendancePercent, attitudeScore, age, totalSessions])
 
   const ovr = useMemo(() => calculateOVR(calculatedScores), [calculatedScores])
   const archetype = useMemo(() => determineArchetype(calculatedScores), [calculatedScores])
@@ -151,7 +157,7 @@ export function TestCalculatorModal({
       split_cm: splitCm,
       skipping_sec: skippingSec,
       technique_stars: techniqueStars,
-      persen_kehadiran: attendancePercent,
+      persen_kehadiran: totalSessions === 0 ? 0 : attendancePercent,
     }
 
     onApply(calculatedScores, rawData)
@@ -163,7 +169,7 @@ export function TestCalculatorModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-dark/70 backdrop-blur-sm animate-fade-in">
       <div
-        className="relative bg-white border-3 border-dark shadow-[8px_8px_0px_#1E2A38] w-full max-w-2xl rounded-2xl p-5 sm:p-6 z-10 flex flex-col gap-4 max-h-[92vh] overflow-hidden"
+        className="relative bg-white border-[3px] border-dark shadow-[8px_8px_0px_#1E2A38] w-full max-w-2xl rounded-2xl p-5 sm:p-6 z-10 flex flex-col gap-4 max-h-[92vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -202,7 +208,10 @@ export function TestCalculatorModal({
               </div>
               <div className="text-xs text-dark/70 font-sans mt-0.5">
                 Usia: <strong className="text-dark font-mono">{age > 0 ? `${age} tahun` : 'Belum diisi (Default < 12 thn)'}</strong>
-                {' · '}Presensi: <strong className="text-dark font-mono">{attendancePercent}%</strong>
+                {' · '}Presensi:{' '}
+                <strong className="text-dark font-mono">
+                  {totalSessions === 0 ? 'N/A (Belum ada sesi)' : `${attendancePercent}%`}
+                </strong>
               </div>
             </div>
           </div>
@@ -524,7 +533,9 @@ export function TestCalculatorModal({
                     {ATTRIBUTE_CONFIG.skor_dis.key} · Kedisiplinan &amp; Nilai Sikap
                   </h4>
                   <p className="text-[11px] text-dark/60">
-                    Formula: (50% Presensi: {attendancePercent}%) + (50% Sikap Pelatih)
+                    {totalSessions === 0
+                      ? 'Formula: 100% Nilai Sikap Pelatih (Belum ada sesi absensi)'
+                      : `Formula: (50% Presensi: ${attendancePercent}%) + (50% Sikap Pelatih)`}
                   </p>
                 </div>
               </div>

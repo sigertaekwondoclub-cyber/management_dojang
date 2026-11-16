@@ -95,6 +95,12 @@ export function AthleteCard({
   showRadarChart = false,
   onClick,
 }: AthleteCardProps) {
+  const [imgError, setImgError] = React.useState<boolean>(false)
+
+  React.useEffect(() => {
+    setImgError(false)
+  }, [siswa.foto_url])
+
   // 1. Resolusi 6 atribut
   const finalScores: SixAttributes = scores
     ? {
@@ -190,10 +196,11 @@ export function AthleteCard({
 
       {/* Header: Avatar, Nama, Sabuk Badge */}
       <div className="flex items-center gap-3.5">
-        {siswa.foto_url ? (
+        {siswa.foto_url && !imgError ? (
           <img
             src={siswa.foto_url}
             alt={siswa.nama}
+            onError={() => setImgError(true)}
             className="w-16 h-16 sm:w-20 sm:h-20 object-cover border-2 border-[#1E2A38] shadow-[3px_3px_0px_#1E2A38] bg-white shrink-0"
           />
         ) : (
