@@ -306,3 +306,4 @@ Ditempatkan di file terisolasi: `src/app/admin/inventaris/actions.ts` dan `src/a
    * Uji pengembalian alat -> Cek pengembalian kuota stok dan update status peminjaman.
    * Uji pengajuan pelatih -> Cek muncul di tab admin dan aksi "Setujui & Beli".
 3. **Build Check:** Memastikan `npm run build` sukses tanpa adanya type error atau missing export.
+

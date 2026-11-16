@@ -752,3 +752,4 @@ export default function PelatihInventarisPage() {
     </div>
   )
 }
+

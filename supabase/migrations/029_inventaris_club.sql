@@ -171,3 +171,4 @@ WITH CHECK (
     get_my_role() = 'pelatih' AND
     pelatih_id = (SELECT pelatih_id FROM profiles WHERE id = auth.uid() AND role = 'pelatih')
 );
+
