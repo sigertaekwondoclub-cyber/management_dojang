@@ -66,6 +66,7 @@ export default function PelatihLayout({ children }: { children: React.ReactNode 
     { label: '📊 Raport Atlet', path: '/pelatih/raport' },
     { label: '🏅 Ujian Sabuk', path: '/pelatih/ujian' },
     { label: '🥋 Event Kompetisi', path: '/pelatih/event' },
+    { label: '📦 Inventaris Alat', path: '/pelatih/inventaris' },
     { label: '📊 Estimasi Honor', path: '/pelatih/estimasi' },
     { label: '🏆 Honor Saya', path: '/pelatih/honor' },
   ]

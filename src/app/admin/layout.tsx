@@ -54,6 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: '💰 Kelola Iuran', path: '/admin/iuran' },
     { label: '🏆 Honor Pelatih', path: '/admin/honor' },
     { label: '📊 Keuangan Club', path: '/admin/keuangan' },
+    { label: '📦 Inventaris Alat', path: '/admin/inventaris' },
     { label: '🪪 Kartu Anggota', path: '/admin/kartu' },
     { label: '🏅 Ujian Sabuk', path: '/admin/ujian' },
     { label: '🥋 Event Kompetisi', path: '/admin/event' },
