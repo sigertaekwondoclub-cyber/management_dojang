@@ -67,7 +67,7 @@ export default function AdminLaporanPage() {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('')
-  const [tagihanStatusFilter, setTagihanStatusFilter] = useState<'semua' | 'belum_bayar' | 'menunggu_verifikasi' | 'lunas'>('belum_bayar')
+  const [tagihanStatusFilter, setTagihanStatusFilter] = useState<'semua' | 'belum_bayar' | 'multi_bulan' | 'menunggu_verifikasi' | 'lunas'>('belum_bayar')
   const [kelasFilter, setKelasFilter] = useState<string>('semua')
 
   // Selected student for detail absensi modal
@@ -549,8 +549,20 @@ export default function AdminLaporanPage() {
       )
     } else if (activeTab === 'tagihan_ortu') {
       downloadCSV(`tagihan-iuran-${bul}-${filterTahun}.csv`,
-        filteredTagihan.map(s => [s.nama, s.programKelas, s.no_hp_ortu, s.nominalIuran, s.statusIuran, s.hadir, s.totalSesi, `${s.persen}%`]),
-        ['Nama Siswa', 'Program Kelas', 'No HP Ortu', 'Nominal Iuran', 'Status Bayar', 'Hadir (Sesi)', 'Total Sesi', '% Kehadiran']
+        filteredTagihan.map(s => [
+          s.nama,
+          s.programKelas,
+          s.no_hp_ortu,
+          s.totalBulanMenunggak,
+          s.totalNominalTunggakan,
+          s.daftarTunggakan.map(d => `${d.namaBulan} ${d.tahun}`).join('; ') || 'Lunas',
+          s.statusIuran,
+          s.hadir,
+          s.totalSesi,
+          `${s.persen}%`,
+          s.totalHadirTunggakan
+        ]),
+        ['Nama Siswa', 'Program Kelas', 'No HP Ortu', 'Bulan Menunggak', 'Total Tunggakan', 'Rincian Bulan', 'Status Periode Ini', 'Hadir Bulan Ini', 'Total Sesi Bulan Ini', '% Kehadiran', 'Total Hadir Periode Menunggak']
       )
     } else if (activeTab === 'prestasi') {
       downloadCSV(`prestasi-${filterTahun}.csv`,
@@ -609,7 +621,7 @@ export default function AdminLaporanPage() {
   }
 
   const handleSalinSemuaBelumBayar = () => {
-    const listBelum = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak')
+    const listBelum = tagihanData.filter(s => s.totalBulanMenunggak > 0)
     if (listBelum.length === 0) {
       alert('Semua siswa sudah lunas untuk periode ini!')
       return
@@ -634,13 +646,16 @@ export default function AdminLaporanPage() {
     if (!matchSearch || !matchKelas) return false
 
     if (tagihanStatusFilter === 'belum_bayar') {
-      return s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak'
+      return s.totalBulanMenunggak > 0
+    }
+    if (tagihanStatusFilter === 'multi_bulan') {
+      return s.totalBulanMenunggak > 1
     }
     if (tagihanStatusFilter === 'menunggu_verifikasi') {
       return s.statusIuran === 'menunggu_verifikasi'
     }
     if (tagihanStatusFilter === 'lunas') {
-      return s.statusIuran === 'lunas'
+      return s.statusIuran === 'lunas' && s.totalBulanMenunggak === 0
     }
     return true
   })
@@ -653,11 +668,12 @@ export default function AdminLaporanPage() {
   })
 
   // Tagihan summary
-  const countBelumBayar = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak').length
-  const nominalBelumBayar = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak').reduce((acc, s) => acc + s.nominalIuran, 0)
+  const countBelumBayar = tagihanData.filter(s => s.totalBulanMenunggak > 0).length
+  const countMultiBulan = tagihanData.filter(s => s.totalBulanMenunggak > 1).length
+  const nominalBelumBayar = tagihanData.filter(s => s.totalBulanMenunggak > 0).reduce((acc, s) => acc + s.totalNominalTunggakan, 0)
   const countMenungguVerif = tagihanData.filter(s => s.statusIuran === 'menunggu_verifikasi').length
-  const countLunas = tagihanData.filter(s => s.statusIuran === 'lunas').length
-  const nominalLunas = tagihanData.filter(s => s.statusIuran === 'lunas').reduce((acc, s) => acc + s.nominalIuran, 0)
+  const countLunas = tagihanData.filter(s => s.statusIuran === 'lunas' && s.totalBulanMenunggak === 0).length
+  const nominalLunas = tagihanData.filter(s => s.statusIuran === 'lunas' && s.totalBulanMenunggak === 0).reduce((acc, s) => acc + s.nominalIuran, 0)
 
   // Kehadiran summary
   const totalCatatanKehadiran = kehadiranData.reduce((acc, s) => acc + s.totalSesi, 0)
@@ -863,6 +879,7 @@ export default function AdminLaporanPage() {
                   <div className="flex gap-2 flex-wrap">
                     {[
                       { key: 'belum_bayar', label: '🔴 Belum Bayar', count: countBelumBayar },
+                      { key: 'multi_bulan', label: '⚠️ Nunggak >1 Bln', count: countMultiBulan },
                       { key: 'menunggu_verifikasi', label: '🔍 Menunggu Verif', count: countMenungguVerif },
                       { key: 'lunas', label: '✅ Lunas', count: countLunas },
                       { key: 'semua', label: 'Semua Status', count: tagihanData.length },
@@ -903,23 +920,47 @@ export default function AdminLaporanPage() {
                   {filteredTagihan.map((s) => (
                     <div
                       key={s.id}
-                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak' ? 'bg-red-50/50 border-red-300' : s.statusIuran === 'menunggu_verifikasi' ? 'bg-yellow-50/50 border-yellow-300' : 'bg-white border-dark/20'}`}
+                      className={`p-4 rounded-2xl border-2 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        s.totalBulanMenunggak > 1
+                          ? 'bg-red-50/70 border-red-400'
+                          : s.totalBulanMenunggak > 0
+                          ? 'bg-red-50/50 border-red-300'
+                          : s.statusIuran === 'menunggu_verifikasi'
+                          ? 'bg-yellow-50/50 border-yellow-300'
+                          : 'bg-white border-dark/20'
+                      }`}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-bold text-dark font-sans text-base">{s.nama}</h4>
                           <Badge color="dark">{s.programKelas}</Badge>
-                          <Badge color={s.statusIuran === 'lunas' ? 'primary' : s.statusIuran === 'menunggu_verifikasi' ? 'secondary' : 'accent'}>
-                            {s.statusIuran === 'lunas' ? '✅ Lunas' : s.statusIuran === 'menunggu_verifikasi' ? '🔍 Menunggu Verif' : '⏳ Belum Bayar'}
-                          </Badge>
+                          {s.totalBulanMenunggak > 1 ? (
+                            <Badge color="accent">⚠️ Menunggak {s.totalBulanMenunggak} Bulan</Badge>
+                          ) : s.statusIuran === 'lunas' ? (
+                            <Badge color="primary">✅ Lunas</Badge>
+                          ) : s.statusIuran === 'menunggu_verifikasi' ? (
+                            <Badge color="secondary">🔍 Menunggu Verif</Badge>
+                          ) : (
+                            <Badge color="accent">⏳ Belum Bayar (1 Bln)</Badge>
+                          )}
                         </div>
 
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-dark/70 font-sans">
                           <div>
-                            💰 Tagihan: <strong className="text-dark font-mono text-sm">{formatRupiah(s.nominalIuran)}</strong>
+                            💰 Tagihan: <strong className="text-dark font-mono text-sm">{formatRupiah(s.totalNominalTunggakan)}</strong>
+                            {s.totalBulanMenunggak > 1 && (
+                              <span className="ml-1 text-xs text-red-600 font-semibold">
+                                ({s.totalBulanMenunggak} Bulan: {s.daftarTunggakan.map(d => d.namaBulan.slice(0, 3)).join(', ')})
+                              </span>
+                            )}
                           </div>
                           <div>
                             📅 Kehadiran: <strong className="text-green-700">{s.hadir}</strong>/{s.totalSesi} sesi ({s.persen}%)
+                            {s.totalBulanMenunggak > 1 && s.totalSesiTunggakan > 0 && (
+                              <span className="ml-1 text-dark/70 font-normal">
+                                (Total {s.totalHadirTunggakan}x hadir selama tunggakan)
+                              </span>
+                            )}
                           </div>
                           <div>
                             📱 HP Ortu: <strong className="text-dark font-mono">{s.no_hp_ortu || 'Belum diisi'}</strong>
