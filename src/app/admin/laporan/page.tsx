@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
 import { getAdminMerchantSalesAction } from '@/app/ortu/merchant/actions'
+import {
+  SiswaRekapTagihanExtended,
+  hitungTunggakanSiswa,
+  generatePesanTagihan as generatePesanTagihanLib,
+  generatePesanRekapLengkap as generatePesanRekapLengkapLib,
+  generateTeksSalinSemuaBelumBayar,
+} from '@/lib/tunggakan'
 
 const supabase = createClient()
 
@@ -41,22 +48,7 @@ interface KehadiranSiswaRekap {
   riwayat: AbsensiRecord[]
 }
 
-interface SiswaRekapTagihan {
-  id: string
-  nama: string
-  no_hp_ortu: string
-  programKelas: string
-  hadir: number
-  izin: number
-  sakit: number
-  alpha: number
-  totalSesi: number
-  persen: number
-  statusIuran: string
-  nominalIuran: number
-  iuranId?: string
-  riwayat: AbsensiRecord[]
-}
+type SiswaRekapTagihan = SiswaRekapTagihanExtended
 
 interface ClubSettings {
   nama_club: string | null
@@ -102,7 +94,7 @@ export default function AdminLaporanPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [keuanganData, setKeuanganData] = useState<any[]>([])
   const [kehadiranData, setKehadiranData] = useState<KehadiranSiswaRekap[]>([])
-  const [tagihanData, setTagihanData] = useState<SiswaRekapTagihan[]>([])
+  const [tagihanData, setTagihanData] = useState<SiswaRekapTagihanExtended[]>([])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [honorData, setHonorData] = useState<any[]>([])
   const [anggotaData, setAnggotaData] = useState<{ aktif: number; baru: number; nonaktif: number; list: { id: string; nama: string; tgl_gabung: string; status_aktif: boolean }[] }>({ aktif: 0, baru: 0, nonaktif: 0, list: [] })
@@ -250,67 +242,71 @@ export default function AdminLaporanPage() {
 
   // 3. Fetch Tagihan & Ortu
   const fetchTagihan = useCallback(async () => {
-    const bul = parseInt(filterBulan)
-    const tah = parseInt(filterTahun)
+    const bul = parseInt(filterBulan, 10)
+    const tah = parseInt(filterTahun, 10)
     const lastDay = new Date(tah, bul, 0).getDate()
-    const startTgl = `${tah}-${filterBulan}-01`
     const endTgl = `${tah}-${filterBulan}-${String(lastDay).padStart(2, '0')}`
+
+    // Lookback date up to 24 months before filter period
+    const lookbackDate = new Date(tah, bul - 1 - 24, 1)
+    const lookbackYear = lookbackDate.getFullYear()
+    const lookbackMonth = String(lookbackDate.getMonth() + 1).padStart(2, '0')
+    const lookbackStartTgl = `${lookbackYear}-${lookbackMonth}-01`
 
     const [siswaRes, absensiRes, iuranRes] = await Promise.all([
       supabase
         .from('siswa')
-        .select('id, nama, no_hp_ortu, program_kelas_id, program_kelas:program_kelas_id(nama_program, biaya_bulanan)')
+        .select('id, nama, no_hp_ortu, tgl_gabung, program_kelas_id, program_kelas:program_kelas_id(nama_program, biaya_bulanan)')
         .eq('status_aktif', true)
         .order('nama'),
       supabase
         .from('absensi_siswa')
         .select('id, tgl, kelas, status_hadir, siswa_id, pelatih:pelatih_id_pengajar(nama)')
-        .gte('tgl', startTgl)
+        .gte('tgl', lookbackStartTgl)
         .lte('tgl', endTgl)
         .order('tgl', { ascending: true }),
       supabase
         .from('iuran')
-        .select('id, siswa_id, status_bayar, nominal')
-        .eq('bulan', bul)
-        .eq('tahun', tah),
+        .select('id, siswa_id, status_bayar, nominal, bulan, tahun')
+        .or(`tahun.lt.${tah},and(tahun.eq.${tah},bulan.lte.${bul})`),
     ])
 
     const siswaList = siswaRes.data || []
-    const absensiRows = absensiRes.data || []
-    const iuranRows = iuranRes.data || []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const absensiRows = (absensiRes.data || []).map((a: any) => ({
+      id: a.id,
+      siswa_id: a.siswa_id,
+      tgl: a.tgl,
+      kelas: a.kelas,
+      status_hadir: a.status_hadir,
+      pelatih_nama: a.pelatih?.nama || 'Pelatih'
+    }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const iuranRows = (iuranRes.data || []).map((i: any) => ({
+      id: i.id,
+      siswa_id: i.siswa_id,
+      bulan: Number(i.bulan),
+      tahun: Number(i.tahun),
+      nominal: Number(i.nominal),
+      status_bayar: i.status_bayar
+    }))
 
-    const merged: SiswaRekapTagihan[] = siswaList.map(s => {
-      const abs = absensiRows.filter(a => a.siswa_id === s.id)
-      const iuran = iuranRows.find(i => i.siswa_id === s.id)
-      const hadir = abs.filter(a => a.status_hadir === 'hadir').length
-      const total = abs.length
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const prog = s.program_kelas as any
-      const defaultBiaya = prog?.biaya_bulanan || 100000
-
-      return {
-        id: s.id,
-        nama: s.nama,
-        no_hp_ortu: s.no_hp_ortu || '',
-        programKelas: prog?.nama_program || 'Umum',
-        hadir,
-        izin: abs.filter(a => a.status_hadir === 'izin').length,
-        sakit: abs.filter(a => a.status_hadir === 'sakit').length,
-        alpha: abs.filter(a => a.status_hadir === 'alpha').length,
-        totalSesi: total,
-        persen: total > 0 ? Math.round((hadir / total) * 100) : 0,
-        statusIuran: iuran?.status_bayar || 'belum_bayar',
-        nominalIuran: iuran ? Number(iuran.nominal) : defaultBiaya,
-        iuranId: iuran?.id,
-        riwayat: abs.map(a => ({
-          id: a.id,
-          tgl: a.tgl,
-          kelas: a.kelas,
-          status_hadir: a.status_hadir as 'hadir' | 'izin' | 'sakit' | 'alpha',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          pelatih_nama: (a.pelatih as any)?.nama || 'Pelatih'
-        }))
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const merged: SiswaRekapTagihanExtended[] = siswaList.map((s: any) => {
+      const prog = Array.isArray(s.program_kelas) ? s.program_kelas[0] : s.program_kelas
+      return hitungTunggakanSiswa({
+        siswa: {
+          id: s.id,
+          nama: s.nama,
+          no_hp_ortu: s.no_hp_ortu,
+          tgl_gabung: s.tgl_gabung,
+          program_kelas: prog
+        },
+        iuranRows,
+        absensiRows,
+        filterBulan: bul,
+        filterTahun: tah
+      })
     })
 
     setTagihanData(merged)
@@ -576,58 +572,27 @@ export default function AdminLaporanPage() {
     }
   }
 
-  // Formatting WhatsApp Message for Billing Reminder
-  const generatePesanTagihan = (siswa: SiswaRekapTagihan): string => {
-    const bul = BULAN_NAMES[parseInt(filterBulan)]
-    const clubName = clubSettings?.nama_club || 'Siger Taekwondo Club'
-    const bank = clubSettings?.rekening_bank || 'BCA / BRI / Mandiri'
-    const noRek = clubSettings?.rekening_nomor || '-'
-    const an = clubSettings?.rekening_atas_nama || clubName
-
-    return `🥋 *PEMBERITAHUAN TAGIHAN IURAN BULANAN*\n*${clubName.toUpperCase()}*\n\n` +
-      `Kepada Yth. Orang Tua / Wali Siswa\n` +
-      `👤 *Nama Siswa*: ${siswa.nama}\n` +
-      `🥋 *Program*: Kelas ${siswa.programKelas}\n` +
-      `📅 *Periode Tagihan*: ${bul} ${filterTahun}\n` +
-      `💰 *Jumlah Tagihan*: *${formatRupiah(siswa.nominalIuran)}*\n` +
-      `📌 *Status*: ⏳ Belum Lunas\n\n` +
-      `📊 *Kehadiran Latihan (${bul} ${filterTahun})*:\n` +
-      `• Hadir: ${siswa.hadir}x dari ${siswa.totalSesi} sesi (${siswa.persen}%)\n` +
-      `• Izin: ${siswa.izin}x | Sakit: ${siswa.sakit}x | Alpha: ${siswa.alpha}x\n\n` +
-      `💳 *Rekening Pembayaran*:\n` +
-      `• Bank: ${bank}\n` +
-      `• No. Rekening: *${noRek}*\n` +
-      `• Atas Nama: ${an}\n\n` +
-      `_Mohon untuk melakukan konfirmasi & upload bukti transfer melalui portal wali murid atau kirimkan balasan ke pesan ini setelah melakukan pembayaran._\n\n` +
-      `Terima kasih atas kerja sama dan dukungannya. 🙏🥋`
+  // Formatting WhatsApp Message for Billing Reminder (delegated to @/lib/tunggakan)
+  const generatePesanTagihan = (siswa: SiswaRekapTagihanExtended): string => {
+    return generatePesanTagihanLib(
+      siswa,
+      clubSettings,
+      parseInt(filterBulan, 10),
+      parseInt(filterTahun, 10)
+    )
   }
 
-  // Formatting WhatsApp Message for Full Report
-  const generatePesanRekapLengkap = (siswa: SiswaRekapTagihan): string => {
-    const bul = BULAN_NAMES[parseInt(filterBulan)]
-    const clubName = clubSettings?.nama_club || 'Siger Taekwondo Club'
-    const statusLabel: Record<string, string> = {
-      lunas: '✅ LUNAS',
-      belum_bayar: '⏳ BELUM DIBAYAR',
-      menunggu_verifikasi: '🔍 MENUNGGU VERIFIKASI ADMIN',
-      ditolak: '❌ DITOLAK (Silakan Upload Ulang)'
-    }
-
-    return `📊 *LAPORAN BULANAN SISWA*\n*${clubName.toUpperCase()}*\n\n` +
-      `👤 *Nama Siswa*: ${siswa.nama}\n` +
-      `🥋 *Program*: ${siswa.programKelas}\n` +
-      `📅 *Periode*: ${bul} ${filterTahun}\n\n` +
-      `🥋 *REKAP KEHADIRAN*:\n` +
-      `• Total Kehadiran: *${siswa.hadir}x* dari ${siswa.totalSesi} sesi (${siswa.persen}%)\n` +
-      `• Izin: ${siswa.izin}x | Sakit: ${siswa.sakit}x | Alpha: ${siswa.alpha}x\n\n` +
-      `💰 *STATUS IURAN BULANAN*:\n` +
-      `• Tagihan: *${formatRupiah(siswa.nominalIuran)}*\n` +
-      `• Status: *${statusLabel[siswa.statusIuran] || siswa.statusIuran}*\n\n` +
-      `Tetap semangat berlatih! 🥋🔥\n` +
-      `_${clubName}_`
+  // Formatting WhatsApp Message for Full Report (delegated to @/lib/tunggakan)
+  const generatePesanRekapLengkap = (siswa: SiswaRekapTagihanExtended): string => {
+    return generatePesanRekapLengkapLib(
+      siswa,
+      clubSettings,
+      parseInt(filterBulan, 10),
+      parseInt(filterTahun, 10)
+    )
   }
 
-  const handleKirimWA = (siswa: SiswaRekapTagihan, mode: 'tagihan' | 'rekap') => {
+  const handleKirimWA = (siswa: SiswaRekapTagihanExtended, mode: 'tagihan' | 'rekap') => {
     if (!siswa.no_hp_ortu) {
       alert(`Nomor HP Orang Tua untuk siswa ${siswa.nama} belum terdaftar di data siswa.`)
       return
@@ -637,29 +602,24 @@ export default function AdminLaporanPage() {
     window.open(`https://wa.me/${noWA}?text=${encodeURIComponent(teks)}`, '_blank')
   }
 
-  const handleSalinPesan = (siswa: SiswaRekapTagihan, mode: 'tagihan' | 'rekap') => {
+  const handleSalinPesan = (siswa: SiswaRekapTagihanExtended, mode: 'tagihan' | 'rekap') => {
     const teks = mode === 'tagihan' ? generatePesanTagihan(siswa) : generatePesanRekapLengkap(siswa)
     navigator.clipboard.writeText(teks)
     showToast(`📋 Pesan ${mode === 'tagihan' ? 'Tagihan' : 'Rekap'} untuk ${siswa.nama} berhasil disalin ke clipboard!`)
   }
 
   const handleSalinSemuaBelumBayar = () => {
-    const bul = BULAN_NAMES[parseInt(filterBulan)]
     const listBelum = tagihanData.filter(s => s.statusIuran === 'belum_bayar' || s.statusIuran === 'ditolak')
     if (listBelum.length === 0) {
       alert('Semua siswa sudah lunas untuk periode ini!')
       return
     }
 
-    const totalNominal = listBelum.reduce((acc, curr) => acc + curr.nominalIuran, 0)
-    let text = `📋 *DAFTAR SISWA BELUM BAYAR IURAN*\n` +
-      `📅 Periode: ${bul} ${filterTahun}\n` +
-      `👥 Total: ${listBelum.length} Siswa\n` +
-      `💰 Total Tagihan: ${formatRupiah(totalNominal)}\n\n`
-
-    listBelum.forEach((s, idx) => {
-      text += `${idx + 1}. *${s.nama}* (${s.programKelas}) - ${formatRupiah(s.nominalIuran)} (WA: ${s.no_hp_ortu || '-'})\n`
-    })
+    const text = generateTeksSalinSemuaBelumBayar(
+      listBelum,
+      parseInt(filterBulan, 10),
+      parseInt(filterTahun, 10)
+    )
 
     navigator.clipboard.writeText(text)
     showToast(`📋 Daftar ${listBelum.length} siswa belum bayar berhasil disalin!`)
