@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { filterSiswaByKelas } from '@/lib/absensi'
 import type { AbsensiSiswa, AbsensiPelatih } from '@/lib/types'
 
 type Tab = 'siswa' | 'pelatih'
@@ -47,7 +48,7 @@ function TambahAbsensiModal({ isOpen, onClose, onSaved }: TambahModalProps) {
   const today = new Date().toISOString().split('T')[0]
   const [tgl, setTgl] = useState(today)
   const [kelas, setKelas] = useState('Umum')
-  const [siswaList, setSiswaList] = useState<{ id: string; nama: string }[]>([])
+  const [siswaList, setSiswaList] = useState<{ id: string; nama: string; fokus_prestasi?: string | null; program_kelas?: any }[]>([])
   const [pelatihList, setPelatihList] = useState<{ id: string; nama: string }[]>([])
   const [selectedSiswa, setSelectedSiswa] = useState('')
   const [selectedPelatih, setSelectedPelatih] = useState('')
@@ -58,15 +59,31 @@ function TambahAbsensiModal({ isOpen, onClose, onSaved }: TambahModalProps) {
   useEffect(() => {
     if (!isOpen) return
     // Load siswa & pelatih
-    supabase.from('siswa').select('id, nama').eq('status_aktif', true).order('nama').then(({ data }) => {
-      setSiswaList(data || [])
-      if (data && data.length > 0 && !selectedSiswa) setSelectedSiswa(data[0].id)
-    })
+    supabase
+      .from('siswa')
+      .select('id, nama, fokus_prestasi, program_kelas:program_kelas_id(nama_program)')
+      .eq('status_aktif', true)
+      .order('nama')
+      .then(({ data }) => {
+        setSiswaList(data || [])
+      })
     supabase.from('pelatih').select('id, nama').eq('status_aktif', true).order('nama').then(({ data }) => {
       setPelatihList(data || [])
       if (data && data.length > 0 && !selectedPelatih) setSelectedPelatih(data[0].id)
     })
   }, [isOpen])
+
+  const filteredSiswaList = filterSiswaByKelas(siswaList, kelas)
+
+  useEffect(() => {
+    if (filteredSiswaList.length > 0) {
+      if (!selectedSiswa || !filteredSiswaList.some(s => s.id === selectedSiswa)) {
+        setSelectedSiswa(filteredSiswaList[0].id)
+      }
+    } else {
+      setSelectedSiswa('')
+    }
+  }, [kelas, filteredSiswaList, selectedSiswa])
 
   const handleSimpan = async () => {
     if (!selectedSiswa || !selectedPelatih) return
@@ -108,18 +125,6 @@ function TambahAbsensiModal({ isOpen, onClose, onSaved }: TambahModalProps) {
         <div className="flex flex-col gap-4">
           <Input label="Tanggal" type="date" value={tgl} onChange={e => setTgl(e.target.value)} />
 
-          {/* Siswa */}
-          <div className="flex flex-col gap-2">
-            <label className="font-bold text-dark text-sm">Siswa</label>
-            <select
-              value={selectedSiswa}
-              onChange={e => setSelectedSiswa(e.target.value)}
-              className="border-2 border-dark px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans text-sm"
-            >
-              {siswaList.map(s => <option key={s.id} value={s.id}>{s.nama}</option>)}
-            </select>
-          </div>
-
           {/* Kelas */}
           <div className="flex flex-col gap-2">
             <label className="font-bold text-dark text-sm">Kelas</label>
@@ -129,6 +134,27 @@ function TambahAbsensiModal({ isOpen, onClose, onSaved }: TambahModalProps) {
               className="border-2 border-dark px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans text-sm"
             >
               {KELAS_OPTIONS.map(k => <option key={k} value={k}>{k}</option>)}
+            </select>
+          </div>
+
+          {/* Siswa */}
+          <div className="flex flex-col gap-2">
+            <label className="font-bold text-dark text-sm">Siswa ({filteredSiswaList.length} tersedia)</label>
+            <select
+              value={selectedSiswa}
+              onChange={e => setSelectedSiswa(e.target.value)}
+              disabled={filteredSiswaList.length === 0}
+              className="border-2 border-dark px-4 py-3 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-primary font-sans text-sm disabled:bg-gray-100 disabled:text-dark/40"
+            >
+              {filteredSiswaList.length === 0 ? (
+                <option value="">Tidak ada siswa di kelas {kelas}</option>
+              ) : (
+                filteredSiswaList.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.nama} {s.fokus_prestasi ? `(${s.fokus_prestasi === 'pomsae' ? 'Poomsae' : 'Kyorugi'})` : ''}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

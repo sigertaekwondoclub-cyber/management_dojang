@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { BarcodeScanner } from '@/components/ui/BarcodeScanner'
+import { filterSiswaByKelas, isSiswaEligibleForKelas } from '@/lib/absensi'
 import type { Siswa, Profile } from '@/lib/types'
 
 type StatusHadir = 'hadir' | 'izin' | 'sakit' | 'alpha'
@@ -26,13 +27,6 @@ interface ScanResult {
 }
 
 const KELAS_OPTIONS = ['Umum', 'Pomsae', 'Kyurugi']
-
-function filterSiswaByKelas(siswaData: any[], kelas: string): any[] {
-  if (kelas === 'Umum') return siswaData
-  if (kelas === 'Pomsae') return siswaData.filter((s: any) => s.fokus_prestasi === 'pomsae')
-  if (kelas === 'Kyurugi') return siswaData.filter((s: any) => s.fokus_prestasi === 'kyurugi')
-  return siswaData
-}
 
 const STATUS_CONFIG: Record<StatusHadir, { label: string; bg: string; border: string; text: string }> = {
   hadir:  { label: 'Hadir',  bg: 'bg-primary',   border: 'border-primary',   text: 'text-dark' },
@@ -229,7 +223,7 @@ export default function PelatihAbsensiPage() {
     // Lookup kartu → siswa
     const { data: kartu, error: kartuErr } = await supabase
       .from('kartu_anggota')
-      .select('siswa_id, no_kartu, siswa:siswa_id(nama)')
+      .select('siswa_id, no_kartu, siswa:siswa_id(nama, fokus_prestasi, program_kelas:program_kelas_id(nama_program))')
       .eq('qr_code_value', decodedText)
       .eq('status_aktif', true)
       .single()
@@ -239,8 +233,15 @@ export default function PelatihAbsensiPage() {
       return
     }
 
+    const siswaData = (kartu as any).siswa
     const siswaId = kartu.siswa_id
-    const namaSiswa = (kartu as any).siswa?.nama || 'Unknown'
+    const namaSiswa = siswaData?.nama || 'Unknown'
+
+    // Validasi apakah siswa memenuhi syarat untuk kelas yang sedang diabsen
+    if (!isSiswaEligibleForKelas(siswaData, kelas)) {
+      showScanFeedback('error', `⚠️ ${namaSiswa} bukan peserta kelas ${kelas}`)
+      return
+    }
 
     // Upsert absensi hadir langsung
     const { error: absErr } = await supabase

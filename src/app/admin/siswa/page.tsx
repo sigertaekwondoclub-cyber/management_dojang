@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { sanitizeFokusPrestasi } from '@/lib/absensi'
 import type { Siswa } from '@/lib/types'
 
 const SABUK_OPTIONS = ['Putih', 'Kuning', 'Kuning Strip', 'Hijau', 'Hijau Strip', 'Biru', 'Biru Strip', 'Merah', 'Merah Strip 1', 'Merah Strip 2', 'Hitam']
@@ -78,6 +79,8 @@ export default function SiswaAdminPage() {
 
   const openEditForm = (siswa: Siswa) => {
     setEditingId(siswa.id)
+    const prog = programList.find(p => p.id === siswa.program_kelas_id)
+    const sanitizedFokus = sanitizeFokusPrestasi(prog?.nama_program, siswa.fokus_prestasi)
     setFormData({
       nama: siswa.nama,
       tgl_lahir: siswa.tgl_lahir,
@@ -86,7 +89,7 @@ export default function SiswaAdminPage() {
       no_hp_ortu: siswa.no_hp_ortu,
       status_aktif: siswa.status_aktif,
       program_kelas_id: siswa.program_kelas_id || '',
-      fokus_prestasi: siswa.fokus_prestasi || ''
+      fokus_prestasi: sanitizedFokus || ''
     })
     setIsFormOpen(true)
     setFormError(null)
@@ -99,6 +102,9 @@ export default function SiswaAdminPage() {
     setFormError(null)
     setFormSuccess(null)
 
+    const selectedProgram = programList.find(p => p.id === formData.program_kelas_id)
+    const sanitizedFokus = sanitizeFokusPrestasi(selectedProgram?.nama_program, formData.fokus_prestasi)
+
     const payload = {
       nama: formData.nama,
       tgl_lahir: formData.tgl_lahir,
@@ -107,7 +113,7 @@ export default function SiswaAdminPage() {
       no_hp_ortu: formData.no_hp_ortu,
       status_aktif: formData.status_aktif,
       program_kelas_id: formData.program_kelas_id || null,
-      fokus_prestasi: formData.fokus_prestasi || null
+      fokus_prestasi: sanitizedFokus
     }
 
     let error;
@@ -302,7 +308,16 @@ export default function SiswaAdminPage() {
                 <select 
                   className="border-2 border-dark rounded-xl px-4 py-2.5 bg-white text-dark font-sans focus:ring-2 focus:ring-secondary outline-none"
                   value={formData.program_kelas_id}
-                  onChange={e => setFormData({...formData, program_kelas_id: e.target.value})}
+                  onChange={e => {
+                    const newProgId = e.target.value
+                    const prog = programList.find(p => p.id === newProgId)
+                    const isPrestasi = prog?.nama_program.toLowerCase().includes('prestasi')
+                    setFormData({
+                      ...formData,
+                      program_kelas_id: newProgId,
+                      fokus_prestasi: isPrestasi ? formData.fokus_prestasi : ''
+                    })
+                  }}
                   required
                 >
                   <option value="">-- Pilih Program --</option>
