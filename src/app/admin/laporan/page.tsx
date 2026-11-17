@@ -48,8 +48,6 @@ interface KehadiranSiswaRekap {
   riwayat: AbsensiRecord[]
 }
 
-type SiswaRekapTagihan = SiswaRekapTagihanExtended
-
 interface ClubSettings {
   nama_club: string | null
   rekening_bank: string | null
