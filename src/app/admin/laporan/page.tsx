@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { exportKeuanganToExcel, type FinancialExportItem, type FinancialSummaryInfo } from '@/lib/exportKeuangan'
 import { getAdminMerchantSalesAction } from '@/app/ortu/merchant/actions'
+import { generatePesanRekapKehadiranGrup } from '@/lib/absensi'
 import {
   SiswaRekapTagihanExtended,
   hitungTunggakanSiswa,
@@ -87,6 +88,11 @@ export default function AdminLaporanPage() {
     setToastMsg(msg)
     setTimeout(() => setToastMsg(null), 3500)
   }
+
+  // WhatsApp Recap Group Modal state
+  const [showModalRekapWA, setShowModalRekapWA] = useState(false)
+  const [catatanRekapWA, setCatatanRekapWA] = useState('')
+  const [copiedWA, setCopiedWA] = useState(false)
 
   // Data states
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1052,6 +1058,15 @@ export default function AdminLaporanPage() {
                     📅 Rekap Kehadiran Siswa — {BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}
                   </h2>
                   <div className="flex gap-3 flex-wrap items-center">
+                    <button
+                      onClick={() => setShowModalRekapWA(true)}
+                      disabled={filteredKehadiran.length === 0}
+                      className="px-3.5 py-2 bg-primary border-2 border-dark rounded-xl text-xs font-bold text-dark hover:bg-primary/80 transition-all shadow-[2px_2px_0px_#1E2A38] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                      title="Salin format rekap kehadiran untuk grup WhatsApp orang tua"
+                    >
+                      <span>📋</span>
+                      <span>Salin Rekap WhatsApp</span>
+                    </button>
                     <select
                       value={kelasFilter}
                       onChange={e => setKelasFilter(e.target.value)}
@@ -1508,6 +1523,107 @@ export default function AdminLaporanPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL: PRATINJAU REKAP KEHADIRAN WHATSAPP GRUP */}
+      {showModalRekapWA && (() => {
+        const labelKelasMap: Record<string, string> = {
+          semua: 'Semua Program',
+          umum: 'Kelas Umum',
+          prestasi: 'Kelas Prestasi'
+        }
+        const labelKelas = labelKelasMap[kelasFilter] || 'Semua Program'
+        const maxSesi = filteredKehadiran.length > 0 ? Math.max(...filteredKehadiran.map(s => s.totalSesi)) : 0
+        const waText = generatePesanRekapKehadiranGrup({
+          siswaList: filteredKehadiran,
+          bulanNama: BULAN_NAMES[parseInt(filterBulan)],
+          tahun: filterTahun,
+          labelKelas,
+          totalSesiDojang: maxSesi,
+          catatanTambahan: catatanRekapWA
+        })
+
+        const handleSalin = () => {
+          navigator.clipboard.writeText(waText)
+          setCopiedWA(true)
+          showToast('📋 Rekap kehadiran WhatsApp berhasil disalin ke clipboard!')
+          setTimeout(() => setCopiedWA(false), 2500)
+        }
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-dark/60 backdrop-blur-sm" onClick={() => setShowModalRekapWA(false)} />
+            <div className="relative bg-white border-2 border-dark shadow-brutal w-full max-w-2xl rounded-2xl p-6 z-10 flex flex-col gap-4 max-h-[90vh] overflow-hidden">
+              <div className="flex justify-between items-start border-b border-dark/10 pb-3">
+                <div>
+                  <h3 className="text-xl font-bold font-sans text-dark flex items-center gap-2">
+                    <span>📱</span>
+                    <span>Rekap Kehadiran untuk Grup WhatsApp</span>
+                  </h3>
+                  <p className="text-xs text-dark/60 font-sans mt-0.5">
+                    Periode: <strong className="text-dark">{BULAN_NAMES[parseInt(filterBulan)]} {filterTahun}</strong> · Program: <strong className="text-dark">{labelKelas}</strong> ({filteredKehadiran.length} siswa)
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowModalRekapWA(false)}
+                  className="w-8 h-8 rounded-full border border-dark/30 hover:bg-dark hover:text-white flex items-center justify-center font-bold text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Form Input Catatan Tambahan */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-dark font-sans flex items-center justify-between">
+                  <span>📢 Catatan / Pengumuman Tambahan (Opsional):</span>
+                  <span className="text-[11px] text-dark/40 font-normal">Muncul di bagian bawah pesan</span>
+                </label>
+                <textarea
+                  value={catatanRekapWA}
+                  onChange={e => setCatatanRekapWA(e.target.value)}
+                  placeholder="Contoh: Latihan gabungan persiapan kejuaraan diadakan hari Sabtu pkl 08.00 WIB. Harap hadir tepat waktu."
+                  rows={2}
+                  className="border border-dark/30 rounded-xl px-3 py-2 text-xs font-sans bg-background text-dark focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                />
+              </div>
+
+              {/* Box Preview Teks Monospace */}
+              <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+                <div className="flex items-center justify-between text-xs text-dark/60 font-bold uppercase">
+                  <span>Pratinjau Pesan:</span>
+                  <span className="text-[11px] font-normal lowercase">{waText.split('\n').length} baris</span>
+                </div>
+                <div className="bg-dark/5 border-2 border-dark/20 rounded-xl p-3 overflow-y-auto flex-1 text-xs font-mono text-dark whitespace-pre-wrap select-all">
+                  {waText}
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-dark/10">
+                <div className="text-xs text-dark/60 font-sans">
+                  Klik salin, lalu paste langsung di grup WhatsApp orang tua siswa.
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="accent"
+                    onClick={() => setShowModalRekapWA(false)}
+                    className="text-xs py-2 px-3"
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleSalin}
+                    className="text-xs py-2 px-4 shadow-[2px_2px_0px_#1E2A38] flex items-center gap-1.5"
+                  >
+                    <span>{copiedWA ? '✅' : '📋'}</span>
+                    <span>{copiedWA ? 'Tersalin ke Clipboard!' : 'Salin Teks WhatsApp'}</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
