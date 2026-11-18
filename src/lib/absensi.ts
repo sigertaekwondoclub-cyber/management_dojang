@@ -67,3 +67,78 @@ export function sanitizeFokusPrestasi(
   return null
 }
 
+export interface RekapKehadiranItem {
+  nama: string
+  programKelas: string
+  hadir: number
+  izin: number
+  sakit: number
+  alpha: number
+  totalSesi: number
+  persen: number
+}
+
+export interface GenerateRekapKehadiranParams {
+  siswaList: RekapKehadiranItem[]
+  bulanNama: string
+  tahun: number | string
+  labelKelas: string
+  totalSesiDojang: number
+  catatanTambahan?: string
+}
+
+export function generatePesanRekapKehadiranGrup(params: GenerateRekapKehadiranParams): string {
+  const { siswaList, bulanNama, tahun, labelKelas, totalSesiDojang, catatanTambahan } = params
+
+  // Urutkan siswa: persen tertinggi (descending), lalu nama (ascending)
+  const sorted = [...siswaList].sort((a, b) => {
+    if (b.persen !== a.persen) return b.persen - a.persen
+    return a.nama.localeCompare(b.nama)
+  })
+
+  // Hitung ringkasan
+  const totalPersen = sorted.reduce((acc, curr) => acc + curr.persen, 0)
+  const avgPersen = sorted.length > 0 ? Math.round(totalPersen / sorted.length) : 0
+  const count100 = sorted.filter(s => s.persen === 100).length
+
+  const lines: string[] = []
+  lines.push('🥋 *REKAP KEHADIRAN SISWA*')
+  lines.push('*SIGER TAEKWONDO CLUB*')
+  lines.push(`📅 *Periode*: ${bulanNama} ${tahun}`)
+  lines.push(`🏷️ *Program*: ${labelKelas}`)
+  lines.push(`📊 *Total Sesi*: ${totalSesiDojang} Sesi Latihan`)
+  lines.push('')
+  lines.push('📋 *Rincian Kehadiran Siswa*:')
+
+  if (sorted.length === 0) {
+    lines.push('_Belum ada data kehadiran untuk periode ini._')
+  } else {
+    sorted.forEach((s, idx) => {
+      let badge = '⚠️ Perlu Ditingkatkan'
+      if (s.persen >= 80) badge = '🌟 Sangat Baik'
+      else if (s.persen >= 60) badge = '👍 Cukup'
+
+      lines.push(`${idx + 1}. *${s.nama}* (${s.programKelas})`)
+      lines.push(`   • Hadir: ${s.hadir} | Izin: ${s.izin} | Sakit: ${s.sakit} | Alpha: ${s.alpha}`)
+      lines.push(`   • Kehadiran: ${s.persen}% (${badge})`)
+    })
+  }
+
+  lines.push('')
+  lines.push('📈 *Ringkasan Dojang*:')
+  lines.push(`• Rata-rata Kehadiran: ${avgPersen}%`)
+  lines.push(`• Kehadiran Penuh (100%): ${count100} Siswa`)
+
+  if (catatanTambahan && catatanTambahan.trim()) {
+    lines.push('')
+    lines.push('📢 *Catatan & Pengumuman*:')
+    lines.push(catatanTambahan.trim())
+  }
+
+  lines.push('')
+  lines.push('Terima kasih atas bimbingan dan dukungan Ayah/Bunda di rumah. Tetap semangat berlatih! 🥋🔥')
+
+  return lines.join('\n')
+}
+
+

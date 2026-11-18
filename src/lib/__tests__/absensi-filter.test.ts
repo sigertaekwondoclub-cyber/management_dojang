@@ -4,6 +4,7 @@ import {
   isSiswaEligibleForKelas,
   filterSiswaByKelas,
   sanitizeFokusPrestasi,
+  generatePesanRekapKehadiranGrup,
 // @ts-expect-error - Node --experimental-strip-types requires explicit .ts extension
 } from '../absensi.ts'
 
@@ -85,6 +86,44 @@ assert.strictEqual(sanitizeFokusPrestasi('Prestasi', 'kyurugi'), 'kyurugi')
 assert.strictEqual(sanitizeFokusPrestasi('Prestasi', 'pomsae'), 'pomsae')
 assert.strictEqual(sanitizeFokusPrestasi('Prestasi', ''), null)
 assert.strictEqual(sanitizeFokusPrestasi(null, 'kyurugi'), null)
+
+// Test 6: generatePesanRekapKehadiranGrup
+console.log('Test 6: generatePesanRekapKehadiranGrup formatting and sorting')
+const mockRekapSiswa = [
+  { nama: 'Budi Santoso', programKelas: 'Umum', hadir: 6, izin: 1, sakit: 1, alpha: 0, totalSesi: 8, persen: 75 },
+  { nama: 'Siti Rahma', programKelas: 'Prestasi', hadir: 8, izin: 0, sakit: 0, alpha: 0, totalSesi: 8, persen: 100 },
+  { nama: 'Andi Pratama', programKelas: 'Umum', hadir: 4, izin: 0, sakit: 0, alpha: 4, totalSesi: 8, persen: 50 },
+]
+
+const waText = generatePesanRekapKehadiranGrup({
+  siswaList: mockRekapSiswa,
+  bulanNama: 'November',
+  tahun: 2026,
+  labelKelas: 'Semua Program',
+  totalSesiDojang: 8,
+  catatanTambahan: 'Latihan gabungan sabtu depan pukul 08.00 WIB.',
+})
+
+assert.ok(waText.includes('REKAP KEHADIRAN SISWA'), 'Header must exist')
+assert.ok(waText.includes('November 2026'), 'Period must be in text')
+assert.ok(waText.includes('Semua Program'), 'Program filter label must exist')
+assert.ok(waText.includes('8 Sesi Latihan'), 'Total sessions must exist')
+
+// Siti has 100% so she should appear first
+const indexSiti = waText.indexOf('Siti Rahma')
+const indexBudi = waText.indexOf('Budi Santoso')
+const indexAndi = waText.indexOf('Andi Pratama')
+assert.ok(indexSiti < indexBudi, 'Siti (100%) must appear before Budi (75%)')
+assert.ok(indexBudi < indexAndi, 'Budi (75%) must appear before Andi (50%)')
+
+// Badges
+assert.ok(waText.includes('🌟 Sangat Baik'), 'Siti badge')
+assert.ok(waText.includes('👍 Cukup'), 'Budi badge')
+assert.ok(waText.includes('⚠️ Perlu Ditingkatkan'), 'Andi badge')
+
+// Summary
+assert.ok(waText.includes('Kehadiran Penuh (100%): 1 Siswa'), '1 student with 100% attendance')
+assert.ok(waText.includes('Latihan gabungan sabtu depan pukul 08.00 WIB.'), 'Custom note must be included')
 
 console.log('✅ ALL ABSENSI FILTER & SANITIZE UNIT TESTS PASSED!')
 
