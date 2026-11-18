@@ -47,25 +47,25 @@
   export function generatePesanRekapKehadiranGrup(params: GenerateRekapKehadiranParams): string
   ```
 
-- [ ] **Step 1: Write failing unit tests for `generatePesanRekapKehadiranGrup` in `src/lib/__tests__/absensi-filter.test.ts`**
+- [x] **Step 1: Write failing unit tests for `generatePesanRekapKehadiranGrup` in `src/lib/__tests__/absensi-filter.test.ts`**
   - Uji formatting teks dengan daftar siswa
   - Uji sorting persentase kehadiran descending
   - Uji lencana kehadiran (`🌟 Sangat Baik`, `👍 Cukup`, `⚠️ Perlu Ditingkatkan`)
   - Uji penambahan catatan opsional
 
-- [ ] **Step 2: Run test to confirm it fails**
+- [x] **Step 2: Run test to confirm it fails**
   Run: `node --experimental-strip-types src/lib/__tests__/absensi-filter.test.ts` (expect import error / missing function)
 
-- [ ] **Step 3: Implement `generatePesanRekapKehadiranGrup` in `src/lib/absensi.ts`**
+- [x] **Step 3: Implement `generatePesanRekapKehadiranGrup` in `src/lib/absensi.ts`**
   - Implementasikan interface `RekapKehadiranItem` dan `GenerateRekapKehadiranParams`
   - Implementasikan pengurutan siswa berdasarkan `persen` descending, kemudian `nama`
   - Implementasikan penghitungan rata-rata dan jumlah kehadiran 100%
   - Kembalikan string teks terformat rapi dengan emoji WhatsApp
 
-- [ ] **Step 4: Run test to confirm it passes**
+- [x] **Step 4: Run test to confirm it passes**
   Run: `node --experimental-strip-types src/lib/__tests__/absensi-filter.test.ts`
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -am "feat: implement generatePesanRekapKehadiranGrup with tests"`
 
 ---
@@ -80,26 +80,26 @@
   `generatePesanRekapKehadiranGrup` dari `@/lib/absensi`
   `BULAN_NAMES` dari `@/lib/tunggakan`
 
-- [ ] **Step 1: Tambahkan state modal di `AdminLaporanPage`**
+- [x] **Step 1: Tambahkan state modal di `AdminLaporanPage`**
   - `showModalRekapWA`: boolean (default `false`)
   - `catatanRekapWA`: string (default `''`)
 
-- [ ] **Step 2: Tambahkan tombol "📋 Salin Rekap WhatsApp" di tab `kehadiran`**
+- [x] **Step 2: Tambahkan tombol "📋 Salin Rekap WhatsApp" di tab `kehadiran`**
   - Letakkan di sebelah kanan filter kelas & pencarian nama
   - Disabled jika `filteredKehadiran.length === 0`
   - Saat diklik: buka modal `showModalRekapWA = true`
 
-- [ ] **Step 3: Buat komponen `ModalRekapKehadiranWA`**
+- [x] **Step 3: Buat komponen `ModalRekapKehadiranWA`**
   - Generate live-preview teks WhatsApp berdasarkan data siswa terfilter, bulan, tahun, kelasFilter, dan catatan kustom
   - Tampilkan kotak textarea/pre-formatted preview yang bisa di-scroll
   - Input field textarea untuk `catatanRekapWA`
   - Tombol "📋 Salin Teks ke Clipboard" dengan feedback toast dan status icon
   - Tombol "Tutup / Batal"
 
-- [ ] **Step 4: Verifikasi build dan tipe data**
+- [x] **Step 4: Verifikasi build dan tipe data**
   Run: `npx tsc --noEmit`
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -am "feat: add whatsapp attendance recap modal and copy trigger"`
 
 ---
@@ -109,14 +109,15 @@
 **Files:**
 - All touched files
 
-- [ ] **Step 1: Jalankan semua unit test**
+- [x] **Step 1: Jalankan semua unit test**
   Run: `node --experimental-strip-types src/lib/__tests__/absensi-filter.test.ts && node --experimental-strip-types src/lib/__tests__/tunggakan.test.ts`
 
-- [ ] **Step 2: Jalankan TypeScript compiler check**
+- [x] **Step 2: Jalankan TypeScript compiler check**
   Run: `npx tsc --noEmit`
 
-- [ ] **Step 3: Jalankan Next.js production build**
+- [x] **Step 3: Jalankan Next.js production build**
   Run: `npm run build`
 
-- [ ] **Step 4: Push commit ke GitHub `origin/master`**
+- [x] **Step 4: Push commit ke GitHub `origin/master`**
   Run: `git push origin master`
+
