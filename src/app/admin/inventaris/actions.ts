@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { requireAdmin } from '@/lib/auth-guard'
 import type {
   KategoriInventaris,
   InventarisBarang,
@@ -84,6 +85,7 @@ export interface KembalikanPeminjamanOptions {
  */
 export async function getAdminInventarisData() {
   try {
+    await requireAdmin()
     const today = new Date().toISOString().split('T')[0]
 
     // Otomatis tandai peminjaman yang melewati tanggal rencana kembali sebagai 'terlambat'
@@ -167,6 +169,7 @@ export async function getAdminInventarisData() {
  */
 export async function tambahBarangMaster(data: TambahBarangInput) {
   try {
+    await requireAdmin()
     if (!data.nama_barang || !data.nama_barang.trim()) {
       throw new Error('Nama barang wajib diisi')
     }
@@ -222,6 +225,7 @@ export async function tambahBarangMaster(data: TambahBarangInput) {
  */
 export async function updateKondisiBarang(id: string, data: UpdateKondisiInput) {
   try {
+    await requireAdmin()
     if (!id) throw new Error('ID barang tidak valid')
 
     const kondisiBaik = Number(data.kondisi_baik ?? 0)
@@ -295,6 +299,7 @@ export async function updateKondisiBarang(id: string, data: UpdateKondisiInput) 
  */
 export async function catatPembelianBaru(data: CatatPembelianInput) {
   try {
+    await requireAdmin()
     const jumlah = parseInt(String(data.jumlah), 10)
     if (isNaN(jumlah) || jumlah <= 0) {
       throw new Error('Jumlah pembelian harus lebih dari 0')
@@ -471,6 +476,7 @@ export async function catatPembelianBaru(data: CatatPembelianInput) {
  */
 export async function hapusPembelian(id: string) {
   try {
+    await requireAdmin()
     if (!id) throw new Error('ID pembelian tidak valid')
 
     const { data: pembelian, error: fErr } = await supabaseAdmin
@@ -547,6 +553,7 @@ export async function hapusPembelian(id: string) {
  */
 export async function catatPeminjamanAdmin(data: CatatPeminjamanInput) {
   try {
+    await requireAdmin()
     if (!data.barang_id) throw new Error('Pilih alat yang ingin dipinjam')
     if (!data.nama_peminjam || !data.nama_peminjam.trim()) {
       throw new Error('Nama peminjam wajib diisi')
@@ -644,6 +651,7 @@ export async function kembalikanPeminjaman(
   options?: KembalikanPeminjamanOptions
 ) {
   try {
+    await requireAdmin()
     if (!id) throw new Error('ID peminjaman tidak valid')
 
     // 1. Ambil data peminjaman
@@ -746,6 +754,7 @@ export async function updateStatusPengajuan(
   catatan_admin?: string | null
 ) {
   try {
+    await requireAdmin()
     if (!id) throw new Error('ID pengajuan tidak valid')
     if (!['menunggu', 'disetujui', 'ditolak'].includes(status)) {
       throw new Error('Status pengajuan tidak valid')

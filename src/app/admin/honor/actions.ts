@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/auth-guard'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,7 @@ const supabaseAdmin = createClient(
 
 export async function generatePayroll(bulan: number, tahun: number) {
   try {
+    await requireAdmin()
     // 1. Ambil data konfigurasi club (alokasi bucket)
     const { data: config, error: configErr } = await supabaseAdmin
       .from('pengaturan_club')
@@ -232,6 +234,7 @@ export async function generatePayroll(bulan: number, tahun: number) {
 
 export async function updateDetailStatusDibayar(detailId: string, status: boolean) {
   try {
+    await requireAdmin()
     // 1. Ambil detail payroll
     const { data: detail, error: fetchErr } = await supabaseAdmin
       .from('payroll_details')
@@ -352,6 +355,7 @@ export async function updateDetailStatusDibayar(detailId: string, status: boolea
 
 export async function updatePotonganKasbon(detailId: string, potongan: number) {
   try {
+    await requireAdmin()
     const { data: detail, error: fetchErr } = await supabaseAdmin
       .from('payroll_details')
       .select('*')
@@ -386,6 +390,7 @@ export async function updatePotonganKasbon(detailId: string, potongan: number) {
 
 export async function tambahKasbon(pelatihId: string, nominal: number, tglPinjam: string, keterangan: string) {
   try {
+    await requireAdmin()
     if (!pelatihId) throw new Error('Pelatih harus dipilih')
     if (nominal <= 0) throw new Error('Nominal pinjaman harus lebih dari 0')
     if (!tglPinjam) throw new Error('Tanggal pinjam harus diisi')
@@ -444,6 +449,7 @@ export async function tambahKasbon(pelatihId: string, nominal: number, tglPinjam
 
 export async function hapusKasbon(kasbonId: string) {
   try {
+    await requireAdmin()
     // 1. Cek riwayat pembayaran
     const { count, error: countErr } = await supabaseAdmin
       .from('pembayaran_kasbon')
@@ -477,6 +483,7 @@ export async function hapusKasbon(kasbonId: string) {
 
 export async function catatPembayaranTunai(kasbonId: string, nominal: number, tglBayar: string, catatan?: string) {
   try {
+    await requireAdmin()
     if (nominal <= 0) throw new Error('Nominal pembayaran harus lebih dari 0')
     if (!tglBayar) throw new Error('Tanggal bayar harus diisi')
 

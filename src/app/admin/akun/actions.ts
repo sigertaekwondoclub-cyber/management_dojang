@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/auth-guard'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,6 +34,7 @@ interface ActionResult {
 
 export async function createAccount(data: CreateAccountData): Promise<ActionResult> {
   try {
+    await requireAdmin()
     const password = data.password || 'SigerTKD123!'
 
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -70,6 +72,7 @@ export async function createAccount(data: CreateAccountData): Promise<ActionResu
 
 export async function updateAccount(data: UpdateAccountData): Promise<ActionResult> {
   try {
+    await requireAdmin()
     // Update email di auth jika berubah
     if (data.newEmail) {
       const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
@@ -107,6 +110,7 @@ export async function updateAccount(data: UpdateAccountData): Promise<ActionResu
 
 export async function deleteAccount(userId: string): Promise<ActionResult> {
   try {
+    await requireAdmin()
     // Hapus dari auth (cascade otomatis menghapus profile jika ada FK)
     const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(userId)
     if (deleteErr) throw deleteErr
@@ -123,6 +127,7 @@ export async function deleteAccount(userId: string): Promise<ActionResult> {
 
 export async function resetPassword(userId: string, newPassword: string): Promise<ActionResult> {
   try {
+    await requireAdmin()
     const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
       password: newPassword
     })
@@ -136,6 +141,7 @@ export async function resetPassword(userId: string, newPassword: string): Promis
 
 export async function listPelatih() {
   try {
+    await requireAdmin()
     const { data } = await supabaseAdmin
       .from('pelatih')
       .select('id, nama')
@@ -149,6 +155,7 @@ export async function listPelatih() {
 
 export async function listSiswaAktif() {
   try {
+    await requireAdmin()
     const { data } = await supabaseAdmin
       .from('siswa')
       .select('id, nama')
@@ -162,6 +169,7 @@ export async function listSiswaAktif() {
 
 export async function listAkun() {
   try {
+    await requireAdmin()
     const { data: profiles, error: profileErr } = await supabaseAdmin
       .from('profiles')
       .select('id, nama, role, pelatih_id, siswa_id, created_at')

@@ -389,3 +389,4 @@ Expected: Exit code 0, semua 47 route terkompilasi dengan baik.
 git add src/lib/__tests__/ujian-sertifikat.test.ts
 git commit -m "test(ujian): add unit tests for belt cert registration permanence"
 ```
+

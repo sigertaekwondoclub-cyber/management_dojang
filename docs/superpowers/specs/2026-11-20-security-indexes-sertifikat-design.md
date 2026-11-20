@@ -132,3 +132,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 4. **Functional Test**:
    - Menguji alur kenaikan sabuk Putih ke Kuning dengan nomor registrasi, memverifikasi nilai tersimpan di `ujian_sabuk` dan `siswa`.
    - Menguji kenaikan sabuk lanjutan (Kuning ke Hijau), memastikan nomor registrasi otomatis terbaca dan terkunci.
+

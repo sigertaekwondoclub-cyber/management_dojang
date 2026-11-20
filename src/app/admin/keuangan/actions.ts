@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/auth-guard'
 import type { RekonsiliasiBank } from '@/lib/types'
 
 const supabaseAdmin = createClient(
@@ -13,6 +14,7 @@ const supabaseAdmin = createClient(
  */
 export async function toggleReconcileStatus(transaksiId: string, newStatus: boolean) {
   try {
+    await requireAdmin()
     if (!transaksiId) throw new Error('ID Transaksi tidak valid')
 
     const now = newStatus ? new Date().toISOString() : null
@@ -83,6 +85,7 @@ export async function toggleReconcileStatus(transaksiId: string, newStatus: bool
  */
 export async function bulkMarkReconciled(transaksiIds: string[]) {
   try {
+    await requireAdmin()
     const iuranIds = transaksiIds.filter(id => id.startsWith('iuran_')).map(id => id.replace('iuran_', ''))
     const honorIds = transaksiIds.filter(id => id.startsWith('honor_')).map(id => id.replace('honor_', ''))
     const validIds = transaksiIds.filter(id => !id.startsWith('iuran_') && !id.startsWith('merchant_') && !id.startsWith('honor_'))
@@ -144,6 +147,7 @@ export async function saveBankReconciliation(payload: {
   catatan?: string
 }) {
   try {
+    await requireAdmin()
     const selisih = Math.round(Number(payload.saldo_bank_riil) - Number(payload.saldo_buku_sistem))
     const status = selisih === 0 ? 'cocok' : 'ada_selisih'
 
@@ -189,6 +193,7 @@ export async function saveBankReconciliation(payload: {
  */
 export async function getReconciliationHistory(): Promise<{ success: boolean; data: RekonsiliasiBank[] }> {
   try {
+    await requireAdmin()
     const { data, error } = await supabaseAdmin
       .from('rekonsiliasi_bank')
       .select('*')

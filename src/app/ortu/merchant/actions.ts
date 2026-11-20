@@ -2,6 +2,8 @@
 
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireOrtu } from '@/lib/auth-guard'
+import { verifyChildBelongsToParent } from '@/lib/auth-guard'
 import type { PesananMerchant, StatusPesanan } from '@/lib/types'
 
 const supabaseAdmin = createClient(
@@ -9,16 +11,20 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const ALLOWED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+const MAX_UPLOAD_SIZE = 5 * 1024 * 1024 // 5 MB
+
+// Payload dari client hanya butuh qty, bukan harga (harga diambil dari DB server-side)
 interface CheckoutItemPayload {
   produkId: string
   varianId: string
   qty: number
-  hargaSatuan: number
+  hargaSatuan: number // diterima tapi DIABAIKAN — harga dihitung server-side dari produk_merchant.harga
 }
 
 interface CheckoutRequest {
   siswaId: string
-  totalHarga: number
+  totalHarga: number // diterima tapi DIABAIKAN — dihitung ulang server-side
   items: CheckoutItemPayload[]
 }
 
@@ -30,12 +36,9 @@ interface CheckoutResult {
 
 export async function checkoutMerchantAction(payload: CheckoutRequest): Promise<CheckoutResult> {
   try {
-    const supabase = createServerClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return { success: false, message: 'Silakan login terlebih dahulu.' }
-    }
+    // 0. Auth guard — hanya ortu atau admin yang dapat checkout
+    const ctx = await requireOrtu()
+    const userProfile = ctx.profile
 
     if (!payload.siswaId) {
       return { success: false, message: 'Data siswa wajib dipilih.' }
@@ -45,11 +48,32 @@ export async function checkoutMerchantAction(payload: CheckoutRequest): Promise<
       return { success: false, message: 'Keranjang belanja kosong.' }
     }
 
-    // 1. Verifikasi stok varian sebelum checkout
+    // 1. Validasi kepemilikan anak (IDOR protection)
+    if (userProfile.role === 'ortu') {
+      const { data: siblings } = await supabaseAdmin
+        .from('siswa')
+        .select('id')
+        .eq('no_hp_ortu', (await supabaseAdmin
+          .from('siswa')
+          .select('no_hp_ortu')
+          .eq('id', userProfile.siswa_id!)
+          .single()
+        ).data?.no_hp_ortu || '')
+        .eq('status_aktif', true)
+
+      const siblingIds = (siblings || []).map((s: { id: string }) => s.id)
+      const isOwner = verifyChildBelongsToParent(userProfile.siswa_id, payload.siswaId, siblingIds)
+
+      if (!isOwner) {
+        return { success: false, message: 'Anda tidak memiliki akses untuk memesan atas nama siswa ini.' }
+      }
+    }
+
+    // 2. Ambil data varian + harga master dari DB (SERVER-SIDE — mengabaikan harga dari client)
     const varianIds = payload.items.map(i => i.varianId)
     const { data: variants, error: varErr } = await supabaseAdmin
       .from('produk_varian')
-      .select('id, stok, ukuran, produk_id, produk_merchant:produk_id(nama)')
+      .select('id, stok, ukuran, produk_id, produk_merchant!inner(id, nama, harga)')
       .in('id', varianIds)
 
     if (varErr || !variants) {
@@ -58,26 +82,33 @@ export async function checkoutMerchantAction(payload: CheckoutRequest): Promise<
 
     const variantMap = new Map(variants.map(v => [v.id, v]))
 
+    // 3. Validasi stok & hitung total harga SERVER-SIDE
+    let serverTotalHarga = 0
+    const serverItems: { varianId: string; produkId: string; qty: number; hargaSatuan: number }[] = []
+
     for (const item of payload.items) {
       const v = variantMap.get(item.varianId)
       if (!v) {
-        return { success: false, message: `Varian produk tidak ditemukan di sistem.` }
+        return { success: false, message: 'Varian produk tidak ditemukan di sistem.' }
       }
       if (v.stok < item.qty) {
-        const prodName = (v.produk_merchant as any)?.nama || 'Produk'
+        const produk = v.produk_merchant as unknown as { nama: string; harga: number }
         return {
           success: false,
-          message: `Stok untuk ${prodName} (Ukuran: ${v.ukuran}) tidak mencukupi. Tersedia: ${v.stok}, dipesan: ${item.qty}.`
+          message: `Stok untuk ${produk.nama} (Ukuran: ${v.ukuran}) tidak mencukupi. Tersedia: ${v.stok}, dipesan: ${item.qty}.`
         }
       }
+      const realPrice = (v.produk_merchant as unknown as { nama: string; harga: number }).harga
+      serverTotalHarga += realPrice * item.qty
+      serverItems.push({ varianId: item.varianId, produkId: item.produkId, qty: item.qty, hargaSatuan: realPrice })
     }
 
-    // 2. Buat pesanan baru
+    // 4. Buat pesanan baru dengan harga SERVER-SIDE
     const { data: pesanan, error: orderErr } = await supabaseAdmin
       .from('pesanan_merchant')
       .insert({
         siswa_id: payload.siswaId,
-        total_harga: payload.totalHarga,
+        total_harga: serverTotalHarga,
         status: 'menunggu_pembayaran',
       })
       .select()
@@ -87,8 +118,8 @@ export async function checkoutMerchantAction(payload: CheckoutRequest): Promise<
       return { success: false, message: 'Gagal membuat pesanan: ' + (orderErr?.message || '') }
     }
 
-    // 3. Masukkan item pesanan
-    const itemsData = payload.items.map(item => ({
+    // 5. Masukkan item pesanan dengan harga dari server
+    const itemsData = serverItems.map(item => ({
       pesanan_id: pesanan.id,
       produk_id: item.produkId,
       varian_id: item.varianId,
@@ -106,8 +137,8 @@ export async function checkoutMerchantAction(payload: CheckoutRequest): Promise<
       return { success: false, message: 'Gagal mencatat rincian pesanan: ' + itemsErr.message }
     }
 
-    // 4. Potong stok produk_varian menggunakan Admin client (bypasses RLS pembatasan ortu)
-    for (const item of payload.items) {
+    // 6. Potong stok produk_varian
+    for (const item of serverItems) {
       const v = variantMap.get(item.varianId)!
       const newStok = Math.max(0, v.stok - item.qty)
       const { error: updateStokErr } = await supabaseAdmin
@@ -147,6 +178,14 @@ export async function uploadBuktiTransferMerchantAction(formData: FormData): Pro
 
     if (!pesananId || !file) {
       return { success: false, message: 'Pesanan ID dan berkas bukti transfer wajib disertakan.' }
+    }
+
+    // Validasi ukuran dan tipe file
+    if (file.size > MAX_UPLOAD_SIZE) {
+      return { success: false, message: 'Ukuran berkas maksimal 5MB.' }
+    }
+    if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
+      return { success: false, message: 'Tipe berkas tidak diizinkan. Gunakan JPG, PNG, WebP, atau PDF.' }
     }
 
     // Cek pesanan

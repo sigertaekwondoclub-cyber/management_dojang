@@ -2,6 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { revalidatePath } from 'next/cache'
+import { requirePelatih } from '@/lib/auth-guard'
 import type {
   InventarisBarang,
   InventarisPeminjaman,
@@ -22,6 +23,9 @@ const supabaseAdmin = createClient(
  */
 export async function getPelatihInventarisData(pelatihId?: string | null) {
   try {
+    const ctx = await requirePelatih()
+    const effectivePelatihId = ctx.profile.pelatih_id || pelatihId
+
     // 1. Ambil master barang
     const { data: barang, error: bErr } = await supabaseAdmin
       .from('inventaris_barang')
@@ -36,8 +40,8 @@ export async function getPelatihInventarisData(pelatihId?: string | null) {
       .select('*, inventaris_barang(nama_barang, kode_barang, kategori)')
       .order('created_at', { ascending: false })
 
-    if (pelatihId) {
-      peminjamanQuery = peminjamanQuery.eq('pelatih_id', pelatihId)
+    if (effectivePelatihId) {
+      peminjamanQuery = peminjamanQuery.eq('pelatih_id', effectivePelatihId)
     }
 
     const { data: peminjaman, error: pErr } = await peminjamanQuery
@@ -49,8 +53,8 @@ export async function getPelatihInventarisData(pelatihId?: string | null) {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (pelatihId) {
-      pengajuanQuery = pengajuanQuery.eq('pelatih_id', pelatihId)
+    if (effectivePelatihId) {
+      pengajuanQuery = pengajuanQuery.eq('pelatih_id', effectivePelatihId)
     }
 
     const { data: pengajuan, error: gErr } = await pengajuanQuery
@@ -94,8 +98,11 @@ export interface AjukanPinjamPelatihInput {
  */
 export async function ajukanPinjamPelatih(data: AjukanPinjamPelatihInput) {
   try {
+    const ctx = await requirePelatih()
+    const effectivePelatihId = ctx.profile.pelatih_id || data.pelatih_id
+
     if (!data.barang_id) throw new Error('Pilih alat yang ingin dipinjam')
-    if (!data.pelatih_id) throw new Error('Identitas pelatih tidak valid')
+    if (!effectivePelatihId) throw new Error('Identitas pelatih tidak valid')
     if (!data.tgl_pinjam || !data.tgl_rencana_kembali) throw new Error('Tanggal pinjam dan batas kembali wajib diisi')
     if (!data.keperluan || !data.keperluan.trim()) throw new Error('Keperluan peminjaman wajib diisi')
 
@@ -140,7 +147,7 @@ export async function ajukanPinjamPelatih(data: AjukanPinjamPelatihInput) {
       .from('inventaris_peminjaman')
       .insert({
         barang_id: data.barang_id,
-        pelatih_id: data.pelatih_id,
+        pelatih_id: effectivePelatihId,
         nama_peminjam: data.nama_peminjam.trim(),
         jumlah,
         tgl_pinjam: data.tgl_pinjam,
@@ -192,7 +199,10 @@ export interface AjukanKebutuhanAlatInput {
  */
 export async function ajukanKebutuhanAlat(data: AjukanKebutuhanAlatInput) {
   try {
-    if (!data.pelatih_id) throw new Error('Identitas pelatih tidak valid')
+    const ctx = await requirePelatih()
+    const effectivePelatihId = ctx.profile.pelatih_id || data.pelatih_id
+
+    if (!effectivePelatihId) throw new Error('Identitas pelatih tidak valid')
     if (!data.nama_barang || !data.nama_barang.trim()) throw new Error('Nama alat wajib diisi')
     if (!data.alasan || !data.alasan.trim()) throw new Error('Alasan kebutuhan wajib diisi')
 
@@ -206,7 +216,7 @@ export async function ajukanKebutuhanAlat(data: AjukanKebutuhanAlatInput) {
     const { data: pengajuan, error } = await supabaseAdmin
       .from('inventaris_pengajuan')
       .insert({
-        pelatih_id: data.pelatih_id,
+        pelatih_id: effectivePelatihId,
         nama_barang: data.nama_barang.trim(),
         kategori: data.kategori || 'Target & Kicking',
         jumlah,
