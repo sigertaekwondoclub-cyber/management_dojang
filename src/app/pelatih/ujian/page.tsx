@@ -12,7 +12,7 @@ const BELT_ORDER = ['Putih', 'Kuning', 'Kuning Strip', 'Hijau', 'Hijau Strip', '
 
 function getNextBelt(currentBelt: string) {
   const index = BELT_ORDER.indexOf(currentBelt)
-  if (index === -1 || index === BELT_ORDER.length - 1) return currentBelt 
+  if (index === -1 || index === BELT_ORDER.length - 1) return currentBelt
   return BELT_ORDER[index + 1]
 }
 
@@ -23,24 +23,27 @@ export default function PelatihUjianSabukPage() {
   const [pelatihNama, setPelatihNama] = useState('')
   const supabase = createClient()
 
-  // Form State
+  // Form jadwal baru
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [formTglUjian, setFormTglUjian] = useState('')
   const [selectedSiswaIds, setSelectedSiswaIds] = useState<string[]>([])
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  
-  // Update Nilai State
+
+  // Modal evaluasi hasil
   const [evalUjianId, setEvalUjianId] = useState<string | null>(null)
   const [evalHasil, setEvalHasil] = useState<'lulus' | 'tidak_lulus' | null>(null)
   const [evalCatatan, setEvalCatatan] = useState('')
+  const [evalNoReg, setEvalNoReg] = useState('')
+  const [isRegLocked, setIsRegLocked] = useState(false)
+  const [evalUjianData, setEvalUjianData] = useState<UjianSabuk | null>(null)
 
   const TARGET_SESI_UJIAN = 12
   const [siswaHadirMap, setSiswaHadirMap] = useState<Record<string, number>>({})
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    
+
     // Get current pelatih info
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
@@ -48,24 +51,24 @@ export default function PelatihUjianSabukPage() {
       if (profile) setPelatihNama(profile.nama)
     }
 
-    // Fetch Ujian
+    // Fetch Ujian — sertakan no_reg_sertifikat
     const { data: uData } = await supabase
       .from('ujian_sabuk')
-      .select('*, siswa:siswa_id(nama)')
+      .select('*, siswa:siswa_id(nama, no_reg_sertifikat)')
       .order('tgl_ujian', { ascending: false })
-    
+
     if (uData) setUjianList(uData as UjianSabuk[])
 
-    // Fetch Siswa Aktif
+    // Fetch Siswa Aktif — sertakan no_reg_sertifikat
     const { data: sData } = await supabase
       .from('siswa')
-      .select('*')
+      .select('*, program_kelas:program_kelas_id(nama_program, biaya_bulanan)')
       .eq('status_aktif', true)
       .order('nama', { ascending: true })
-    
+
     if (sData) setSiswaList(sData as Siswa[])
 
-    // Fetch Absensi Siswa (Hadir) untuk menghitung kelayakan ujian (Target 12 Sesi)
+    // Fetch Absensi Siswa untuk hitung kelayakan
     const { data: absData } = await supabase
       .from('absensi_siswa')
       .select('siswa_id, tgl, status_hadir')
@@ -78,19 +81,19 @@ export default function PelatihUjianSabukPage() {
           .filter(u => u.siswa_id === s.id && u.hasil === 'lulus')
           .sort((a, b) => new Date(b.tgl_ujian).getTime() - new Date(a.tgl_ujian).getTime())[0]
 
-        const lastExamDate = lastPassedExam?.tgl_ujian ? new Date(lastPassedExam.tgl_ujian).toISOString().split('T')[0] : null
+        const lastExamDate = lastPassedExam?.tgl_ujian
+          ? new Date(lastPassedExam.tgl_ujian).toISOString().split('T')[0]
+          : null
 
         const studentAbsensi = absData.filter(a => {
           if (a.siswa_id !== s.id) return false
           if (lastExamDate) return a.tgl >= lastExamDate
           return true
         })
-
         hadirMap[s.id] = studentAbsensi.length
       }
     }
     setSiswaHadirMap(hadirMap)
-
     setLoading(false)
   }, [supabase])
 
@@ -99,7 +102,7 @@ export default function PelatihUjianSabukPage() {
   }, [fetchData])
 
   const toggleSiswaSelection = (siswaId: string) => {
-    setSelectedSiswaIds(prev => 
+    setSelectedSiswaIds(prev =>
       prev.includes(siswaId) ? prev.filter(id => id !== siswaId) : [...prev, siswaId]
     )
   }
@@ -152,23 +155,48 @@ export default function PelatihUjianSabukPage() {
   }
 
   const openEval = (ujian: UjianSabuk) => {
+    const siswaData = siswaList.find(s => s.id === ujian.siswa_id)
+    const existingReg = siswaData?.no_reg_sertifikat || ujian.no_reg_sertifikat || ''
+    const locked = Boolean(siswaData?.no_reg_sertifikat)
+
     setEvalUjianId(ujian.id)
+    setEvalUjianData(ujian)
     setEvalHasil(ujian.hasil)
     setEvalCatatan(ujian.catatan || '')
+    setEvalNoReg(existingReg)
+    setIsRegLocked(locked)
   }
 
   const submitEval = async () => {
-    if (!evalUjianId || !evalHasil) return
+    if (!evalUjianId || !evalHasil || !evalUjianData) return
     setFormLoading(true)
 
     const { error } = await supabase
       .from('ujian_sabuk')
-      .update({ hasil: evalHasil, catatan: evalCatatan })
+      .update({
+        hasil: evalHasil,
+        catatan: evalCatatan || null,
+        no_reg_sertifikat: evalNoReg.trim() || null,
+      })
       .eq('id', evalUjianId)
+
+    if (!error && evalHasil === 'lulus' && evalNoReg.trim()) {
+      // Sinkronisasi no_reg ke siswa hanya jika belum ada
+      const siswaData = siswaList.find(s => s.id === evalUjianData.siswa_id)
+      if (!siswaData?.no_reg_sertifikat) {
+        await supabase
+          .from('siswa')
+          .update({ no_reg_sertifikat: evalNoReg.trim() })
+          .eq('id', evalUjianData.siswa_id)
+      }
+    }
 
     if (!error) {
       setEvalUjianId(null)
+      setEvalUjianData(null)
       await fetchData()
+    } else {
+      alert('Gagal menyimpan hasil: ' + error.message)
     }
     setFormLoading(false)
   }
@@ -187,7 +215,7 @@ export default function PelatihUjianSabukPage() {
           {isFormOpen ? 'Batal' : '➕ Jadwalkan Ujian'}
         </Button>
       </div>
-      
+
       {isFormOpen && (
         <Card className="border-primary border-2 bg-primary/5">
           <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
@@ -197,7 +225,7 @@ export default function PelatihUjianSabukPage() {
             </div>
           </div>
           {formError && <div className="mb-4 p-3 bg-accent/20 text-accent font-bold rounded-xl text-sm border border-accent">{formError}</div>}
-          
+
           <form onSubmit={handleJadwalkan} className="flex flex-col gap-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input label="Tanggal Ujian" type="date" value={formTglUjian} onChange={e => setFormTglUjian(e.target.value)} required />
@@ -227,8 +255,8 @@ export default function PelatihUjianSabukPage() {
 
                   return (
                     <label key={siswa.id} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors border ${selectedSiswaIds.includes(siswa.id) ? 'bg-primary/10 border-primary' : 'hover:bg-background border-dark/10'}`}>
-                      <input 
-                        type="checkbox" 
+                      <input
+                        type="checkbox"
                         className="w-5 h-5 accent-primary border-2 border-dark shrink-0"
                         checked={selectedSiswaIds.includes(siswa.id)}
                         onChange={() => toggleSiswaSelection(siswa.id)}
@@ -237,6 +265,11 @@ export default function PelatihUjianSabukPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold font-sans text-dark">{siswa.nama}</span>
+                          {siswa.no_reg_sertifikat && (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                              🪪 {siswa.no_reg_sertifikat}
+                            </span>
+                          )}
                           {isEligible ? (
                             <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-300">
                               🟢 Siap Ujian ({countHadir}/{TARGET_SESI_UJIAN} Sesi)
@@ -270,10 +303,10 @@ export default function PelatihUjianSabukPage() {
         </Card>
       )}
 
-      {/* Menunggu Evaluasi */}
+      {/* Menunggu Penilaian */}
       <Card>
         <h2 className="font-bold font-sans text-dark mb-4 text-lg border-b-2 border-dark pb-2">⏳ Ujian Menunggu Penilaian</h2>
-        {loading ? <p className="py-4 text-center text-dark/50 font-sans">Memuat data...</p> : 
+        {loading ? <p className="py-4 text-center text-dark/50 font-sans">Memuat data...</p> :
          pendingUjian.length === 0 ? <p className="py-4 text-center text-dark/50 font-sans">Semua ujian sudah dinilai.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left font-sans text-sm">
@@ -302,10 +335,10 @@ export default function PelatihUjianSabukPage() {
         )}
       </Card>
 
-      {/* Riwayat Ujian (Selesai) */}
+      {/* Riwayat Ujian */}
       <Card>
         <h2 className="font-bold font-sans text-dark mb-4 text-lg border-b-2 border-dark pb-2">✅ Riwayat Ujian</h2>
-        {loading ? <p className="py-4 text-center text-dark/50 font-sans">Memuat data...</p> : 
+        {loading ? <p className="py-4 text-center text-dark/50 font-sans">Memuat data...</p> :
          completedUjian.length === 0 ? <p className="py-4 text-center text-dark/50 font-sans">Belum ada riwayat ujian.</p> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left font-sans text-sm">
@@ -314,6 +347,7 @@ export default function PelatihUjianSabukPage() {
                   <th className="p-3 font-bold text-dark">Tanggal</th>
                   <th className="p-3 font-bold text-dark">Siswa</th>
                   <th className="p-3 font-bold text-dark">Sabuk</th>
+                  <th className="p-3 font-bold text-dark">No. Reg</th>
                   <th className="p-3 font-bold text-dark">Hasil</th>
                   <th className="p-3 font-bold text-dark">Catatan</th>
                 </tr>
@@ -324,6 +358,15 @@ export default function PelatihUjianSabukPage() {
                     <td className="p-3">{new Date(u.tgl_ujian).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year:'numeric'})}</td>
                     <td className="p-3 font-bold text-dark">{u.siswa?.nama}</td>
                     <td className="p-3">{u.sabuk_asal} → <span className="font-bold">{u.sabuk_tujuan}</span></td>
+                    <td className="p-3">
+                      {u.no_reg_sertifikat ? (
+                        <span className="px-2 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 font-mono">
+                          {u.no_reg_sertifikat}
+                        </span>
+                      ) : (
+                        <span className="text-dark/30 text-xs italic">—</span>
+                      )}
+                    </td>
                     <td className="p-3">
                       {u.hasil === 'lulus' ? <Badge color="primary">Lulus</Badge> : <Badge color="accent">Tidak Lulus</Badge>}
                     </td>
@@ -337,42 +380,88 @@ export default function PelatihUjianSabukPage() {
       </Card>
 
       {/* Modal Input Hasil */}
-      {evalUjianId && (
+      {evalUjianId && evalUjianData && (
         <div className="fixed inset-0 bg-dark/50 flex items-center justify-center p-4 z-50">
           <Card className="max-w-md w-full flex flex-col gap-4">
             <h3 className="font-bold font-sans text-xl text-dark">Input Hasil Ujian</h3>
-            
+
+            {/* Info Ujian */}
+            <div className="bg-background rounded-xl p-3 border border-dark/10 text-sm font-sans text-dark/70">
+              <span className="font-bold text-dark">{evalUjianData.siswa?.nama}</span>
+              {' — '}
+              {evalUjianData.sabuk_asal} → <span className="font-bold text-dark">{evalUjianData.sabuk_tujuan}</span>
+            </div>
+
+            {/* No. Registrasi Sertifikat */}
+            <div className="flex flex-col gap-1.5">
+              <label className="font-bold text-dark font-sans text-sm flex items-center gap-2">
+                🪪 No. Registrasi Sertifikat
+                {isRegLocked && (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-400">
+                    ✅ Tersimpan Permanen
+                  </span>
+                )}
+              </label>
+              {isRegLocked ? (
+                <div className="w-full px-4 py-2.5 rounded-xl border-2 border-green-400 bg-green-50 font-mono font-bold text-green-900 text-sm flex items-center gap-2">
+                  <span className="flex-1">{evalNoReg}</span>
+                  <span className="text-xs text-green-600">🔒 Terkunci</span>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2.5 rounded-xl border-2 border-dark bg-white font-sans text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="Contoh: PBTI-2026-0001 atau kosongkan jika belum ada"
+                    value={evalNoReg}
+                    onChange={e => setEvalNoReg(e.target.value)}
+                  />
+                  {evalUjianData.sabuk_asal === 'Putih' && (
+                    <p className="text-xs text-primary font-bold font-sans">
+                      ⭐ Ini kenaikan pertama. No. registrasi yang diisi akan tersimpan permanen untuk siswa ini.
+                    </p>
+                  )}
+                  {evalUjianData.sabuk_asal !== 'Putih' && (
+                    <p className="text-xs text-dark/50 font-sans">
+                      Nomor registrasi otomatis diambil dari kenaikan pertama (Putih → Kuning).
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Hasil */}
             <div className="flex flex-col gap-2">
               <label className="font-bold text-dark font-sans text-sm">Hasil Keputusan</label>
               <div className="flex gap-2">
-                <button 
+                <button
                   onClick={() => setEvalHasil('lulus')}
                   className={`flex-1 py-3 rounded-xl border-2 font-bold font-sans transition-all ${evalHasil === 'lulus' ? 'bg-primary border-dark shadow-brutal' : 'bg-white border-dark/30 hover:border-dark'}`}
                 >✅ Lulus</button>
-                <button 
+                <button
                   onClick={() => setEvalHasil('tidak_lulus')}
                   className={`flex-1 py-3 rounded-xl border-2 font-bold font-sans transition-all ${evalHasil === 'tidak_lulus' ? 'bg-accent border-dark shadow-brutal text-white' : 'bg-white border-dark/30 hover:border-dark'}`}
                 >❌ Tidak Lulus</button>
               </div>
             </div>
 
-            <Input 
-              label="Catatan Penguji (Opsional)" 
+            <Input
+              label="Catatan Penguji (Opsional)"
               placeholder="Komentar untuk siswa..."
               value={evalCatatan}
               onChange={e => setEvalCatatan(e.target.value)}
             />
 
-            <div className="flex justify-end gap-3 mt-4 pt-4 border-t-2 border-dark/10">
-              <Button variant="secondary" onClick={() => setEvalUjianId(null)}>Batal</Button>
+            <div className="flex justify-end gap-3 mt-2 pt-4 border-t-2 border-dark/10">
+              <Button variant="secondary" onClick={() => { setEvalUjianId(null); setEvalUjianData(null) }}>Batal</Button>
               <Button variant="primary" onClick={submitEval} disabled={!evalHasil || formLoading}>
                 {formLoading ? 'Menyimpan...' : 'Simpan Hasil'}
               </Button>
             </div>
-            
+
             {evalHasil === 'lulus' && (
-              <p className="text-xs font-bold text-primary font-sans text-center mt-2">
-                *Sabuk siswa akan otomatis diperbarui.
+              <p className="text-xs font-bold text-primary font-sans text-center">
+                *Sabuk siswa akan otomatis diperbarui ke {evalUjianData.sabuk_tujuan}.
               </p>
             )}
           </Card>

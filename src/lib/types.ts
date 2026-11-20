@@ -33,6 +33,7 @@ export interface Siswa {
   no_kartu?: string
   program_kelas_id?: string
   fokus_prestasi?: 'pomsae' | 'kyurugi' | null
+  no_reg_sertifikat?: string | null
   created_at: string
   program_kelas?: {
     nama_program: string
@@ -264,8 +265,9 @@ export interface UjianSabuk {
   hasil: 'lulus' | 'tidak_lulus' | null
   penguji: string
   catatan: string | null
+  no_reg_sertifikat?: string | null
   created_at: string
-  siswa?: Pick<Siswa, 'nama'>
+  siswa?: Pick<Siswa, 'nama' | 'no_reg_sertifikat'>
 }
 
 export interface EventKompetisi {
