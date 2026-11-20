@@ -28,7 +28,8 @@ export default function SiswaAdminPage() {
     no_hp_ortu: '',
     status_aktif: true,
     program_kelas_id: '',
-    fokus_prestasi: '' as 'pomsae' | 'kyurugi' | ''
+    fokus_prestasi: '' as 'pomsae' | 'kyurugi' | '',
+    no_reg_sertifikat: ''
   })
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -70,7 +71,8 @@ export default function SiswaAdminPage() {
       no_hp_ortu: '',
       status_aktif: true,
       program_kelas_id: programList[0]?.id || '',
-      fokus_prestasi: ''
+      fokus_prestasi: '',
+      no_reg_sertifikat: ''
     })
     setIsFormOpen(true)
     setFormError(null)
@@ -89,7 +91,8 @@ export default function SiswaAdminPage() {
       no_hp_ortu: siswa.no_hp_ortu,
       status_aktif: siswa.status_aktif,
       program_kelas_id: siswa.program_kelas_id || '',
-      fokus_prestasi: sanitizedFokus || ''
+      fokus_prestasi: sanitizedFokus || '',
+      no_reg_sertifikat: siswa.no_reg_sertifikat || ''
     })
     setIsFormOpen(true)
     setFormError(null)
@@ -113,7 +116,8 @@ export default function SiswaAdminPage() {
       no_hp_ortu: formData.no_hp_ortu,
       status_aktif: formData.status_aktif,
       program_kelas_id: formData.program_kelas_id || null,
-      fokus_prestasi: sanitizedFokus
+      fokus_prestasi: sanitizedFokus,
+      no_reg_sertifikat: formData.no_reg_sertifikat.trim() || null
     }
 
     let error;
@@ -361,6 +365,18 @@ export default function SiswaAdminPage() {
               <Input label="Tanggal Gabung" type="date" value={formData.tgl_gabung} onChange={e => setFormData({...formData, tgl_gabung: e.target.value})} required />
               <Input label="No HP Orang Tua" type="tel" value={formData.no_hp_ortu} onChange={e => setFormData({...formData, no_hp_ortu: e.target.value})} required />
               
+              <div className="md:col-span-2">
+                <Input 
+                  label="No. Registrasi Sertifikat (Opsional / Permanen)" 
+                  placeholder="Contoh: PBTI-2026-0001 (otomatis terisi saat ujian kenaikan sabuk)" 
+                  value={formData.no_reg_sertifikat} 
+                  onChange={e => setFormData({...formData, no_reg_sertifikat: e.target.value})} 
+                />
+                <p className="text-xs text-dark/50 font-sans mt-1">
+                  *Nomor ini umumnya diisi otomatis saat ujian kenaikan Putih ke Kuning. Isi manual jika siswa sudah punya sertifikat sebelumnya.
+                </p>
+              </div>
+              
               <div className="flex flex-col gap-2 justify-center mt-2 md:col-span-2">
                 <label className="flex items-center gap-3 cursor-pointer p-4 border-2 border-dark/20 rounded-xl bg-white hover:bg-background transition-colors w-max">
                   <input 
@@ -394,6 +410,7 @@ export default function SiswaAdminPage() {
                 <th className="p-4 font-bold">Nama</th>
                 <th className="p-4 font-bold">Program</th>
                 <th className="p-4 font-bold">Sabuk</th>
+                <th className="p-4 font-bold">No. Reg</th>
                 <th className="p-4 font-bold">No HP Ortu</th>
                 <th className="p-4 font-bold">Umur</th>
                 <th className="p-4 font-bold text-center">Status</th>
@@ -411,6 +428,15 @@ export default function SiswaAdminPage() {
                       {item.fokus_prestasi && <div className="text-xs font-bold text-primary mt-1">{item.fokus_prestasi === 'pomsae' ? '🥋 Poomsae' : '🥊 Kyorugi'}</div>}
                     </td>
                     <td className="p-4">{item.sabuk_saat_ini}</td>
+                    <td className="p-4">
+                      {item.no_reg_sertifikat ? (
+                        <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 font-mono">
+                          {item.no_reg_sertifikat}
+                        </span>
+                      ) : (
+                        <span className="text-dark/30 text-xs italic">—</span>
+                      )}
+                    </td>
                     <td className="p-4">{item.no_hp_ortu}</td>
                     <td className="p-4">{umur} thn</td>
                     <td className="p-4 text-center">
